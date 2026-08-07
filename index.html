@@ -4,19 +4,31 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Simple Live Tally</title>
+    <!-- Configure Tailwind for manual dark mode toggling -->
+    <script>
+        tailwind = {
+            config: { darkMode: 'class', theme: { extend: {} } }
+        }
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
-<body id="body" class="bg-gray-100 text-gray-800 font-sans transition-colors duration-300 min-h-screen flex flex-col">
+<body id="body" class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100 font-sans transition-colors duration-300 min-h-screen flex flex-col">
 
-    <div id="main-container" class="max-w-4xl mx-auto my-6 flex-grow w-full bg-white rounded-lg shadow-md overflow-hidden transition-all duration-300 flex flex-col">
+    <div id="main-container" class="max-w-5xl mx-auto my-6 flex-grow w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden transition-all duration-300 flex flex-col">
         
         <!-- Header -->
-        <div id="main-header" class="bg-blue-600 p-4 text-white flex justify-between items-center">
-            <h1 class="text-2xl font-bold">Simple Live Tally</h1>
+        <div id="main-header" class="bg-blue-600 p-4 text-white flex justify-between items-center transition-colors duration-500">
+            <div class="flex items-center gap-3">
+                <img id="header-logo" src="" alt="Logo" class="h-8 rounded hidden object-cover bg-white p-0.5">
+                <h1 id="header-title" class="text-2xl font-bold">Simple Live Tally</h1>
+            </div>
             <div class="flex items-center gap-4">
-                <div id="status" class="text-sm opacity-75 bg-blue-800 px-2 py-1 rounded">Not authenticated</div>
-                <a href="#tv" target="_blank" class="text-sm bg-white text-blue-600 hover:bg-gray-100 font-semibold py-1 px-3 rounded inline-flex items-center shadow-sm">
+                <button onclick="toggleDarkMode()" class="p-1.5 rounded bg-black/20 hover:bg-black/40 transition-colors text-white" title="Toggle Dark Mode">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                </button>
+                <div id="status" class="text-sm opacity-90 bg-black/20 px-2 py-1 rounded hidden md:block">Not authenticated</div>
+                <a href="#tv" target="_blank" class="text-sm bg-white text-gray-900 hover:bg-gray-200 font-semibold py-1 px-3 rounded inline-flex items-center shadow-sm">
                     <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
                     TV Display
                 </a>
@@ -25,8 +37,8 @@
 
         <!-- Login Section -->
         <div id="login-section" class="p-8 text-center block my-auto">
-            <p id="login-text" class="mb-4 text-gray-600">Connect to Dropbox to start tallying votes.</p>
-            <button onclick="startAuthFlow()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded shadow-lg transition-transform hover:scale-105">
+            <p id="login-text" class="mb-4 text-gray-600 dark:text-gray-400">Connect to Dropbox to start tallying votes.</p>
+            <button onclick="startAuthFlow()" id="login-btn" class="bg-blue-600 hover:opacity-90 text-white font-bold py-3 px-6 rounded shadow-lg transition-transform hover:scale-105">
                 Authenticate with Dropbox
             </button>
         </div>
@@ -35,11 +47,11 @@
         <div id="app-section" class="hidden flex-col h-full flex-grow">
             
             <!-- Navigation Tabs -->
-            <div id="app-nav" class="bg-gray-100 border-b flex p-2 gap-2">
-                <button onclick="switchTab('dashboard')" id="tab-dashboard" class="px-4 py-2 rounded font-semibold text-sm transition-colors bg-blue-600 text-white shadow-sm">
+            <div id="app-nav" class="bg-gray-100 dark:bg-gray-900 border-b dark:border-gray-700 flex p-2 gap-2">
+                <button onclick="switchTab('dashboard')" id="tab-dashboard" class="px-4 py-2 rounded font-semibold text-sm transition-colors shadow-sm">
                     Live Dashboard
                 </button>
-                <button onclick="switchTab('management')" id="tab-management" class="px-4 py-2 rounded font-semibold text-sm transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300">
+                <button onclick="switchTab('management')" id="tab-management" class="px-4 py-2 rounded font-semibold text-sm transition-colors shadow-sm">
                     Data Management
                 </button>
             </div>
@@ -48,44 +60,46 @@
             <div id="view-dashboard" class="p-6 flex flex-col flex-grow">
                 
                 <!-- Transaction Entry -->
-                <div id="admin-controls" class="mb-8 p-4 bg-blue-50 border border-blue-100 rounded-lg shadow-sm">
+                <div id="admin-controls" class="mb-8 p-4 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-sm">
                     <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-semibold text-blue-900">Add Transaction</h2>
+                        <h2 class="text-xl font-semibold">Add Transaction</h2>
                         <div class="flex items-center gap-2">
-                            <span class="text-sm font-medium text-blue-800">Event:</span>
-                            <select id="active-event-select" onchange="changeActiveEvent()" class="text-sm p-1 border rounded shadow-sm bg-white"></select>
+                            <span class="text-sm font-medium opacity-75">Event:</span>
+                            <select id="active-event-select" onchange="changeActiveEvent()" class="text-sm p-1.5 border border-gray-400 dark:border-gray-500 rounded shadow-sm bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"></select>
                         </div>
                     </div>
                     <div class="flex flex-wrap gap-4 items-end">
                         <div class="flex-1 min-w-[200px]">
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Entity</label>
-                            <select id="entity-select" class="w-full p-2 border rounded shadow-sm bg-white"></select>
+                            <label class="block text-sm font-medium mb-1 opacity-90">Entity</label>
+                            <select id="entity-select" class="w-full p-2.5 border border-gray-400 dark:border-gray-500 rounded shadow-inner bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"></select>
                         </div>
                         <div class="flex-1 min-w-[150px]">
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Amount ($)</label>
-                            <input type="number" id="amount-input" class="w-full p-2 border rounded shadow-sm bg-white" step="0.01" placeholder="0.00">
+                            <label class="block text-sm font-medium mb-1 opacity-90">Amount ($)</label>
+                            <input type="number" id="amount-input" class="w-full p-2.5 border border-gray-400 dark:border-gray-500 rounded shadow-inner bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" step="0.01" placeholder="0.00">
                         </div>
-                        <button onclick="submitTransaction()" id="submit-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-8 rounded shadow-sm w-full md:w-auto">
+                        <button onclick="submitTransaction()" id="submit-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-8 rounded shadow-sm w-full md:w-auto transition-colors">
                             Submit Vote
                         </button>
                     </div>
-                    <div id="entry-message" class="text-sm mt-2 hidden font-medium"></div>
+                    <div id="entry-message" class="text-sm mt-3 hidden font-medium"></div>
                 </div>
 
                 <!-- Leaderboard & Gauge -->
                 <div class="flex flex-col flex-grow">
-                    <div class="flex justify-between items-end mb-6 border-b border-gray-200 pb-2" id="leaderboard-header">
-                        <div>
-                            <h2 id="leaderboard-title" class="text-xl font-semibold transition-all">Live Leaderboard</h2>
-                            <p id="leaderboard-subtitle" class="text-sm text-gray-500 font-medium"></p>
+                    <div class="flex justify-between items-end mb-6 border-b border-gray-200 dark:border-gray-700 pb-2" id="leaderboard-header">
+                        <div class="flex items-center gap-4">
+                            <img id="tv-logo" src="" alt="Logo" class="h-16 rounded hidden object-cover bg-white p-1 border-2 border-gray-200 dark:border-gray-700">
+                            <div>
+                                <h2 id="leaderboard-title" class="text-xl font-semibold transition-all">Live Leaderboard</h2>
+                                <p id="leaderboard-subtitle" class="text-sm text-gray-500 dark:text-gray-400 font-medium"></p>
+                            </div>
                         </div>
                         <div class="text-right">
-                            <div id="event-countdown" class="text-sm font-bold text-blue-600 mb-1 hidden transition-all"></div>
+                            <div id="event-countdown" class="text-sm font-bold text-blue-600 dark:text-blue-400 mb-1 hidden transition-all"></div>
                             <div id="countdown" class="text-xs opacity-50 font-mono">Refreshing in 60s...</div>
                         </div>
                     </div>
                     
-                    <!-- Goal Gauge Container -->
                     <div id="goal-gauge-container" class="w-full flex justify-center mb-4 transition-all"></div>
 
                     <div id="leaderboard" class="space-y-4 flex-1">
@@ -95,57 +109,100 @@
             </div>
 
             <!-- VIEW: MANAGEMENT -->
-            <div id="view-management" class="p-6 hidden flex-col bg-gray-50 flex-grow overflow-y-auto">
+            <div id="view-management" class="p-6 hidden flex-col flex-grow overflow-y-auto">
                 
                 <div class="flex justify-between items-center mb-6">
                     <h2 class="text-2xl font-bold">Data Management</h2>
-                    <button onclick="exportDataZip()" class="bg-gray-800 hover:bg-gray-900 text-white font-semibold py-2 px-4 rounded shadow-sm text-sm inline-flex items-center">
+                    <button onclick="exportDataZip()" class="bg-gray-800 dark:bg-gray-700 hover:opacity-90 text-white font-semibold py-2 px-4 rounded shadow-sm text-sm inline-flex items-center">
                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                         Export Data (ZIP)
                     </button>
                 </div>
                 
+                <!-- 2-Column Grid -->
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     
-                    <!-- Events List -->
-                    <div>
-                        <div class="flex justify-between items-center mb-4 border-b pb-2">
-                            <h3 class="text-lg font-semibold">Events</h3>
-                        </div>
+                    <!-- COLUMN 1: Settings & Entities -->
+                    <div class="space-y-8">
                         
-                        <!-- New Event Inline -->
-                        <div class="bg-white p-3 rounded border shadow-sm mb-4">
-                            <p class="text-xs font-bold text-gray-500 uppercase mb-2">Create New Event</p>
-                            <input type="text" id="new-event-name" placeholder="Event Name" class="w-full p-2 border rounded text-sm mb-2">
-                            <div class="flex gap-2 mb-2">
-                                <div class="flex-1"><label class="text-xs text-gray-500">Goal ($)</label><input type="number" id="new-event-goal" placeholder="Optional" class="w-full p-1 border rounded text-xs"></div>
-                                <div class="flex-1"><label class="text-xs text-gray-500">Start (Opt)</label><input type="datetime-local" id="new-event-start" class="w-full p-1 border rounded text-xs"></div>
-                                <div class="flex-1"><label class="text-xs text-gray-500">End (Opt)</label><input type="datetime-local" id="new-event-end" class="w-full p-1 border rounded text-xs"></div>
+                        <!-- Global Settings -->
+                        <div>
+                            <div class="flex justify-between items-center mb-4 border-b dark:border-gray-700 pb-2">
+                                <h3 class="text-lg font-semibold">Global Settings</h3>
                             </div>
-                            <button onclick="addEvent()" class="w-full bg-blue-600 text-white font-semibold py-1.5 rounded text-sm hover:bg-blue-700">Add Event</button>
+                            <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm">
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Dashboard Title</label>
+                                <input type="text" id="set-title" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-3 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+                                
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Logo URL (Optional)</label>
+                                <input type="url" id="set-logo" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-3 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+                                
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Theme Color</label>
+                                <select id="set-color" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-4 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="bg-blue-600">Blue</option>
+                                    <option value="bg-red-600">Red</option>
+                                    <option value="bg-green-600">Green</option>
+                                    <option value="bg-purple-600">Purple</option>
+                                    <option value="bg-gray-900">Dark Gray</option>
+                                </select>
+
+                                <button onclick="saveSettings()" class="w-full bg-gray-800 dark:bg-gray-600 text-white font-semibold py-2 rounded text-sm hover:opacity-90 transition-opacity">Apply Settings</button>
+                            </div>
                         </div>
 
-                        <!-- Existing Events -->
-                        <div id="events-list" class="space-y-3"></div>
+                        <!-- Entities List -->
+                        <div>
+                            <div class="flex justify-between items-center mb-4 border-b dark:border-gray-700 pb-2">
+                                <h3 class="text-lg font-semibold">Entities (Teams/Items)</h3>
+                            </div>
+
+                            <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm mb-4">
+                                <p class="text-xs font-bold text-gray-500 uppercase mb-2">Register New Entity</p>
+                                <input type="text" id="new-ent-public" placeholder="Public Name" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-2 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+                                <input type="text" id="new-ent-private" placeholder="Private Name (Optional)" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-2 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+                                <input type="url" id="new-ent-img" placeholder="Image URL (Optional)" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-2 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+                                <button onclick="addEntity()" class="w-full bg-blue-600 text-white font-semibold py-2 rounded text-sm hover:opacity-90">Add Entity</button>
+                            </div>
+
+                            <div id="entities-list" class="space-y-3"></div>
+                        </div>
                     </div>
 
-                    <!-- Entities List -->
-                    <div>
-                        <div class="flex justify-between items-center mb-4 border-b pb-2">
-                            <h3 class="text-lg font-semibold">Entities (Teams/Items)</h3>
+                    <!-- COLUMN 2: Events & Transactions -->
+                    <div class="space-y-8">
+                        
+                        <!-- Events List -->
+                        <div>
+                            <div class="flex justify-between items-center mb-4 border-b dark:border-gray-700 pb-2">
+                                <h3 class="text-lg font-semibold">Events</h3>
+                            </div>
+                            
+                            <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm mb-4">
+                                <p class="text-xs font-bold text-gray-500 uppercase mb-2">Create New Event</p>
+                                <input type="text" id="new-event-name" placeholder="Event Name" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-2 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+                                <div class="flex gap-2 mb-2">
+                                    <div class="flex-1"><label class="text-xs text-gray-500">Goal ($)</label><input type="number" id="new-event-goal" placeholder="Opt" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner text-sm bg-white dark:bg-gray-700"></div>
+                                    <div class="flex-1"><label class="text-xs text-gray-500">Start (Opt)</label><input type="datetime-local" id="new-event-start" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner text-xs bg-white dark:bg-gray-700"></div>
+                                    <div class="flex-1"><label class="text-xs text-gray-500">End (Opt)</label><input type="datetime-local" id="new-event-end" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner text-xs bg-white dark:bg-gray-700"></div>
+                                </div>
+                                <button onclick="addEvent()" class="w-full bg-blue-600 text-white font-semibold py-2 rounded text-sm hover:opacity-90">Add Event</button>
+                            </div>
+
+                            <div id="events-list" class="space-y-4"></div>
                         </div>
 
-                        <!-- New Entity Inline -->
-                        <div class="bg-white p-3 rounded border shadow-sm mb-4">
-                            <p class="text-xs font-bold text-gray-500 uppercase mb-2">Register New Entity</p>
-                            <input type="text" id="new-ent-public" placeholder="Public Name" class="w-full p-2 border rounded text-sm mb-2">
-                            <input type="text" id="new-ent-private" placeholder="Private Name (Optional)" class="w-full p-2 border rounded text-sm mb-2">
-                            <input type="url" id="new-ent-img" placeholder="Image URL (Optional)" class="w-full p-2 border rounded text-sm mb-2">
-                            <button onclick="addEntity()" class="w-full bg-blue-600 text-white font-semibold py-1.5 rounded text-sm hover:bg-blue-700">Add Entity</button>
+                        <!-- Active Transactions -->
+                        <div>
+                            <div class="flex justify-between items-center mb-4 border-b dark:border-gray-700 pb-2">
+                                <h3 class="text-lg font-semibold">Transactions (Active Event)</h3>
+                            </div>
+                            <div class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-sm max-h-96 overflow-y-auto p-2">
+                                <div id="transactions-list" class="space-y-2">
+                                    <!-- Populated via JS -->
+                                </div>
+                            </div>
                         </div>
 
-                        <!-- Existing Entities -->
-                        <div id="entities-list" class="space-y-3"></div>
                     </div>
                 </div>
             </div>
@@ -155,13 +212,13 @@
 
     <!-- Footer -->
     <footer id="main-footer" class="text-center text-sm text-gray-500 py-6 mt-auto">
-        <p class="font-medium">Simple Live Tally <span class="font-bold">v1.4.0</span></p>
+        <p class="font-medium">Simple Live Tally <span class="font-bold">v1.5.0</span></p>
         <p class="mt-2 space-x-2">
-            <a href="https://github.com/adambeltz2/Simple-Live-Tally" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline">GitHub</a>
+            <a href="https://github.com/adambeltz2/Simple-Live-Tally" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">GitHub</a>
             <span>|</span>
-            <a href="https://www.buymeacoffee.com/adambeltz" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline">Buy Me a Coffee</a>
+            <a href="https://www.buymeacoffee.com/adambeltz" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">Buy Me a Coffee</a>
             <span>|</span>
-            <a href="javascript:window.open(window.location.pathname, '_blank')" class="text-blue-600 hover:text-blue-800 hover:underline">Admin View</a>
+            <a href="javascript:window.open(window.location.pathname, '_blank')" class="text-blue-600 dark:text-blue-400 hover:underline">Admin View</a>
         </p>
     </footer>
 
@@ -179,6 +236,7 @@
         let countdownInterval = null;
 
         const defaultData = {
+            settings: { title: "Simple Live Tally", logoUrl: "", themeColor: "bg-blue-600" },
             events: [ { id: "evt_" + Date.now(), name: "Inaugural Event", goalAmount: null, startDate: "", endDate: "" } ],
             activeEventId: "", 
             entities: [
@@ -190,19 +248,43 @@
 
         const colors = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500', 'bg-pink-500', 'bg-indigo-500', 'bg-teal-500', 'bg-orange-500'];
 
+        // --- DARK MODE LOGIC ---
+        function initTheme() {
+            const isDark = window.localStorage.getItem('darkMode') === 'true';
+            if (isDark) document.documentElement.classList.add('dark');
+        }
+        function toggleDarkMode() {
+            document.documentElement.classList.toggle('dark');
+            window.localStorage.setItem('darkMode', document.documentElement.classList.contains('dark'));
+        }
+        initTheme(); // Run immediately
+
         // --- VIEW MODE MANAGEMENT ---
+        function applyThemeColor() {
+            if(!appData || !appData.settings) return;
+            const theme = appData.settings.themeColor || 'bg-blue-600';
+            
+            // Update Header BG
+            const header = document.getElementById('main-header');
+            header.className = header.className.replace(/bg-(blue|red|green|purple|gray)-\d+/, theme);
+            
+            // Update Auth Button
+            const btn = document.getElementById('login-btn');
+            if(btn) btn.className = btn.className.replace(/bg-(blue|red|green|purple|gray)-\d+/, theme);
+
+            // Update Tab Active State
+            const activeTab = document.getElementById('view-dashboard').classList.contains('hidden') ? 'tab-management' : 'tab-dashboard';
+            const dashBtn = document.getElementById('tab-dashboard');
+            const mgmtBtn = document.getElementById('tab-management');
+            
+            dashBtn.className = activeTab === 'tab-dashboard' ? `px-4 py-2 rounded font-semibold text-sm transition-colors shadow-sm text-white ${theme}` : 'px-4 py-2 rounded font-semibold text-sm transition-colors shadow-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600';
+            mgmtBtn.className = activeTab === 'tab-management' ? `px-4 py-2 rounded font-semibold text-sm transition-colors shadow-sm text-white ${theme}` : 'px-4 py-2 rounded font-semibold text-sm transition-colors shadow-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600';
+        }
+
         function switchTab(tab) {
             document.getElementById('view-dashboard').classList.toggle('hidden', tab !== 'dashboard');
             document.getElementById('view-management').classList.toggle('hidden', tab !== 'management');
-            
-            document.getElementById('tab-dashboard').className = tab === 'dashboard' 
-                ? 'px-4 py-2 rounded font-semibold text-sm transition-colors bg-blue-600 text-white shadow-sm'
-                : 'px-4 py-2 rounded font-semibold text-sm transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300';
-                
-            document.getElementById('tab-management').className = tab === 'management' 
-                ? 'px-4 py-2 rounded font-semibold text-sm transition-colors bg-blue-600 text-white shadow-sm'
-                : 'px-4 py-2 rounded font-semibold text-sm transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300';
-
+            applyThemeColor();
             if (tab === 'management') renderManagement();
         }
 
@@ -217,16 +299,17 @@
             const subtitle = document.getElementById('leaderboard-subtitle');
             const leaderboardHeader = document.getElementById('leaderboard-header');
             const countdownDisplay = document.getElementById('event-countdown');
+            const tvLogo = document.getElementById('tv-logo');
             
             if (isTvMode) {
                 switchTab('dashboard');
-                body.classList.replace('bg-gray-100', 'bg-gray-900');
-                body.classList.replace('text-gray-800', 'text-white');
-                container.classList.replace('max-w-4xl', 'max-w-full');
+                document.documentElement.classList.add('dark'); // Force dark for TV
+                
+                container.classList.replace('max-w-5xl', 'max-w-full');
                 container.classList.replace('my-6', 'my-0');
-                container.classList.replace('bg-white', 'bg-gray-900');
-                container.classList.replace('shadow-md', 'shadow-none');
+                container.classList.replace('shadow-lg', 'shadow-none');
                 container.classList.add('h-screen', 'p-8', 'rounded-none');
+                container.classList.replace('bg-white', 'bg-transparent'); // TV specific
                 
                 header.classList.add('hidden');
                 nav.classList.add('hidden');
@@ -237,17 +320,20 @@
                 subtitle.classList.replace('text-gray-500', 'text-gray-400');
                 subtitle.classList.add('text-xl', 'mt-2');
                 
-                countdownDisplay.classList.replace('text-blue-600', 'text-blue-400');
                 countdownDisplay.classList.replace('text-sm', 'text-2xl');
+                
+                if(appData && appData.settings && appData.settings.logoUrl) {
+                    tvLogo.src = appData.settings.logoUrl;
+                    tvLogo.classList.remove('hidden');
+                }
             } else {
-                body.classList.replace('bg-gray-900', 'bg-gray-100');
-                body.classList.replace('text-white', 'text-gray-800');
-                container.classList.replace('max-w-full', 'max-w-4xl');
+                initTheme(); // Restore normal dark mode setting
+                
+                container.classList.replace('max-w-full', 'max-w-5xl');
                 container.classList.replace('my-0', 'my-6');
-                container.classList.replace('bg-white', 'bg-white'); // Fallback fix
-                container.classList.replace('bg-gray-900', 'bg-white');
-                container.classList.replace('shadow-none', 'shadow-md');
+                container.classList.replace('shadow-none', 'shadow-lg');
                 container.classList.remove('h-screen', 'p-8', 'rounded-none');
+                container.classList.replace('bg-transparent', 'bg-white');
                 
                 header.classList.remove('hidden');
                 nav.classList.remove('hidden');
@@ -258,11 +344,14 @@
                 subtitle.classList.replace('text-gray-400', 'text-gray-500');
                 subtitle.classList.remove('text-xl', 'mt-2');
                 
-                countdownDisplay.classList.replace('text-blue-400', 'text-blue-600');
                 countdownDisplay.classList.replace('text-2xl', 'text-sm');
+                tvLogo.classList.add('hidden');
             }
 
-            if (appData) renderApp();
+            if (appData) {
+                applyThemeColor();
+                renderApp();
+            }
         }
 
         window.addEventListener('hashchange', checkViewMode);
@@ -334,9 +423,12 @@
                 currentRev = JSON.parse(response.headers.get('Dropbox-API-Result')).rev;
                 appData = await response.json();
                 
+                // Migrations
                 if(!appData.events) appData.events = defaultData.events;
+                if(!appData.settings) appData.settings = defaultData.settings;
                 if(!appData.activeEventId && appData.events.length > 0) appData.activeEventId = appData.events[0].id;
                 
+                applyThemeColor();
                 renderApp();
                 if(!document.getElementById('view-management').classList.contains('hidden')) renderManagement();
             } catch (error) { console.error("Error fetching state:", error); }
@@ -353,7 +445,7 @@
                 body: JSON.stringify(appData)
             });
             if (response.status === 401) { handleAuthFailure(); return false; }
-            if (response.status === 409) { return false; } // Conflict
+            if (response.status === 409) { return false; } 
             
             currentRev = (await response.json()).rev;
             return true;
@@ -383,10 +475,24 @@
             updateFn();
             const success = await saveState();
             if(!success) { alert("Data conflict. Retrying..."); await updateDataWrapper(updateFn); return; }
+            applyThemeColor();
             renderApp();
             renderManagement();
         }
 
+        // Settings
+        function saveSettings() {
+            const t = document.getElementById('set-title').value;
+            const l = document.getElementById('set-logo').value;
+            const c = document.getElementById('set-color').value;
+            updateDataWrapper(() => {
+                appData.settings.title = t;
+                appData.settings.logoUrl = l;
+                appData.settings.themeColor = c;
+            });
+        }
+
+        // Events
         function addEvent() {
             const name = document.getElementById('new-event-name').value;
             const startDate = document.getElementById('new-event-start').value;
@@ -405,23 +511,32 @@
         }
 
         function editEvent(id) {
-            // Capture the values BEFORE the wrapper updates the UI
             const newName = document.getElementById(`ev-name-${id}`).value;
             const newGoal = parseFloat(document.getElementById(`ev-goal-${id}`).value) || null;
             const newStart = document.getElementById(`ev-start-${id}`).value;
             const newEnd = document.getElementById(`ev-end-${id}`).value;
-            
             updateDataWrapper(() => {
                 const ev = appData.events.find(e => e.id === id);
-                if(ev) {
-                    ev.name = newName;
-                    ev.goalAmount = newGoal;
-                    ev.startDate = newStart;
-                    ev.endDate = newEnd;
-                }
+                if(ev) { ev.name = newName; ev.goalAmount = newGoal; ev.startDate = newStart; ev.endDate = newEnd; }
             });
         }
 
+        async function purgeEvent(id) {
+            if (confirm("Would you like to export a ZIP backup before purging this event and its transactions?")) {
+                await exportDataZip();
+            }
+            if (confirm("Are you ABSOLUTELY SURE? This will permanently delete the event and ALL associated transactions. This action cannot be undone.")) {
+                updateDataWrapper(() => {
+                    appData.events = appData.events.filter(e => e.id !== id);
+                    appData.transactions = appData.transactions.filter(t => t.eventId !== id);
+                    if (appData.activeEventId === id) {
+                        appData.activeEventId = appData.events.length > 0 ? appData.events[0].id : "";
+                    }
+                });
+            }
+        }
+
+        // Entities
         function addEntity() {
             const namePublic = document.getElementById('new-ent-public').value;
             const namePrivate = document.getElementById('new-ent-private').value;
@@ -429,8 +544,7 @@
             if (!namePublic) return alert("Public Name required.");
             updateDataWrapper(() => {
                 appData.entities.push({ 
-                    id: 'ent_' + Date.now(), namePublic, namePrivate, imageUrl, 
-                    color: colors[Math.floor(Math.random() * colors.length)] 
+                    id: 'ent_' + Date.now(), namePublic, namePrivate, imageUrl, color: colors[Math.floor(Math.random() * colors.length)] 
                 });
             });
             document.getElementById('new-ent-public').value = '';
@@ -439,23 +553,17 @@
         }
 
         function editEntity(id) {
-            // Capture values BEFORE wrapper
             const newPub = document.getElementById(`ent-pub-${id}`).value;
             const newPriv = document.getElementById(`ent-priv-${id}`).value;
             const newImg = document.getElementById(`ent-img-${id}`).value;
             const newCol = document.getElementById(`ent-col-${id}`).value;
-            
             updateDataWrapper(() => {
                 const ent = appData.entities.find(e => e.id === id);
-                if(ent) {
-                    ent.namePublic = newPub;
-                    ent.namePrivate = newPriv;
-                    ent.imageUrl = newImg;
-                    ent.color = newCol;
-                }
+                if(ent) { ent.namePublic = newPub; ent.namePrivate = newPriv; ent.imageUrl = newImg; ent.color = newCol; }
             });
         }
 
+        // Transactions Core
         async function changeActiveEvent() {
             const newActiveId = document.getElementById('active-event-select').value;
             updateDataWrapper(() => { appData.activeEventId = newActiveId; });
@@ -489,6 +597,26 @@
             });
         }
 
+        // Transaction Modifications
+        function editTransactionAmount(id) {
+            const newAmt = parseFloat(document.getElementById(`tx-amt-${id}`).value);
+            if (isNaN(newAmt)) return;
+            updateDataWrapper(() => {
+                const tx = appData.transactions.find(t => t.id === id);
+                if (tx) {
+                    tx.amount = newAmt;
+                    tx.modifiedDate = new Date().toISOString();
+                }
+            });
+        }
+        function deleteTransaction(id) {
+            if (confirm("Delete this transaction permanently?")) {
+                updateDataWrapper(() => {
+                    appData.transactions = appData.transactions.filter(t => t.id !== id);
+                });
+            }
+        }
+
         // --- RENDER LOGIC ---
         function runCountdown() {
             if (!appData || !appData.activeEventId) return;
@@ -516,19 +644,27 @@
         function renderManagement() {
             if (!appData) return;
             
+            // Render Settings
+            document.getElementById('set-title').value = appData.settings.title || "Simple Live Tally";
+            document.getElementById('set-logo').value = appData.settings.logoUrl || "";
+            document.getElementById('set-color').value = appData.settings.themeColor || "bg-blue-600";
+
             // Render Events
             const evList = document.getElementById('events-list');
             evList.innerHTML = '';
             appData.events.forEach(ev => {
                 evList.innerHTML += `
-                    <div class="bg-white p-3 rounded border shadow-sm">
-                        <input type="text" id="ev-name-${ev.id}" value="${ev.name}" class="w-full p-2 border rounded text-sm mb-2 font-semibold">
-                        <div class="flex gap-2 mb-2">
-                            <div class="flex-1"><label class="text-xs text-gray-500">Goal ($)</label><input type="number" id="ev-goal-${ev.id}" value="${ev.goalAmount || ''}" class="w-full p-1 border rounded text-xs"></div>
-                            <div class="flex-1"><label class="text-xs text-gray-500">Start</label><input type="datetime-local" id="ev-start-${ev.id}" value="${ev.startDate || ''}" class="w-full p-1 border rounded text-xs"></div>
-                            <div class="flex-1"><label class="text-xs text-gray-500">End</label><input type="datetime-local" id="ev-end-${ev.id}" value="${ev.endDate || ''}" class="w-full p-1 border rounded text-xs"></div>
+                    <div class="bg-white dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm">
+                        <input type="text" id="ev-name-${ev.id}" value="${ev.name}" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-3 font-semibold shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+                        <div class="flex gap-2 mb-3">
+                            <div class="flex-1"><label class="text-xs text-gray-500">Goal ($)</label><input type="number" id="ev-goal-${ev.id}" value="${ev.goalAmount || ''}" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded text-xs shadow-inner bg-white dark:bg-gray-700"></div>
+                            <div class="flex-1"><label class="text-xs text-gray-500">Start</label><input type="datetime-local" id="ev-start-${ev.id}" value="${ev.startDate || ''}" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded text-xs shadow-inner bg-white dark:bg-gray-700"></div>
+                            <div class="flex-1"><label class="text-xs text-gray-500">End</label><input type="datetime-local" id="ev-end-${ev.id}" value="${ev.endDate || ''}" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded text-xs shadow-inner bg-white dark:bg-gray-700"></div>
                         </div>
-                        <button onclick="editEvent('${ev.id}')" class="text-xs bg-gray-200 hover:bg-gray-300 font-semibold py-1 px-3 rounded">Save Changes</button>
+                        <div class="flex justify-between items-center mt-2 border-t dark:border-gray-700 pt-3">
+                            <button onclick="editEvent('${ev.id}')" class="text-xs bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 font-semibold py-1.5 px-4 rounded transition-colors">Save Changes</button>
+                            <button onclick="purgeEvent('${ev.id}')" class="text-xs bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 font-semibold py-1.5 px-3 rounded transition-colors" title="Delete event and all its transactions">Purge Event & Data</button>
+                        </div>
                     </div>`;
             });
 
@@ -538,24 +674,63 @@
             appData.entities.forEach(ent => {
                 const colorOptions = colors.map(c => `<option value="${c}" ${ent.color === c ? 'selected' : ''}>${c.replace('bg-','').replace('-500','')}</option>`).join('');
                 entList.innerHTML += `
-                    <div class="bg-white p-3 rounded border shadow-sm flex flex-col gap-2">
+                    <div class="bg-white dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col gap-3">
                         <div class="flex gap-2">
-                            <input type="text" id="ent-pub-${ent.id}" value="${ent.namePublic}" class="flex-1 p-2 border rounded text-sm font-semibold" placeholder="Public Name">
-                            <input type="text" id="ent-priv-${ent.id}" value="${ent.namePrivate || ''}" class="flex-1 p-2 border rounded text-sm" placeholder="Private Name">
+                            <input type="text" id="ent-pub-${ent.id}" value="${ent.namePublic}" class="flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-sm font-semibold shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Public Name">
+                            <input type="text" id="ent-priv-${ent.id}" value="${ent.namePrivate || ''}" class="flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-sm shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Private Name">
                         </div>
                         <div class="flex gap-2">
-                            <input type="url" id="ent-img-${ent.id}" value="${ent.imageUrl || ''}" class="flex-1 p-2 border rounded text-sm" placeholder="Image URL">
-                            <select id="ent-col-${ent.id}" class="p-2 border rounded text-sm ${ent.color} text-white">${colorOptions}</select>
+                            <input type="url" id="ent-img-${ent.id}" value="${ent.imageUrl || ''}" class="flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-sm shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Image URL">
+                            <select id="ent-col-${ent.id}" class="p-2 border border-gray-400 dark:border-gray-600 rounded text-sm ${ent.color} text-white font-semibold shadow-inner outline-none">${colorOptions}</select>
                         </div>
-                        <div><button onclick="editEntity('${ent.id}')" class="text-xs bg-gray-200 hover:bg-gray-300 font-semibold py-1 px-3 rounded">Save Changes</button></div>
+                        <div><button onclick="editEntity('${ent.id}')" class="text-xs bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 font-semibold py-1.5 px-4 rounded transition-colors">Save Changes</button></div>
                     </div>`;
             });
+
+            // Render Transactions (Active Event)
+            const txList = document.getElementById('transactions-list');
+            txList.innerHTML = '';
+            const activeTx = appData.transactions.filter(t => t.eventId === appData.activeEventId).sort((a,b) => new Date(b.createDate) - new Date(a.createDate));
+            
+            if (activeTx.length === 0) {
+                txList.innerHTML = '<p class="text-sm text-gray-500 p-2 italic">No transactions for this event yet.</p>';
+            } else {
+                activeTx.forEach(tx => {
+                    const ent = appData.entities.find(e => e.id === tx.entityId);
+                    const entName = ent ? ent.namePublic : 'Unknown';
+                    const dt = new Date(tx.createDate).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+                    
+                    txList.innerHTML += `
+                        <div class="flex items-center justify-between p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors border-b dark:border-gray-700 last:border-0">
+                            <div class="flex flex-col">
+                                <span class="text-sm font-semibold">${entName}</span>
+                                <span class="text-xs text-gray-500">${dt}</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium opacity-50">$</span>
+                                <input type="number" id="tx-amt-${tx.id}" value="${tx.amount}" step="0.01" class="w-20 p-1 border border-gray-300 dark:border-gray-500 rounded text-sm text-right bg-white dark:bg-gray-800 shadow-inner">
+                                <button onclick="editTransactionAmount('${tx.id}')" class="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-1.5 rounded hover:bg-blue-200" title="Update Amount">Update</button>
+                                <button onclick="deleteTransaction('${tx.id}')" class="text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-1.5 rounded hover:bg-red-200" title="Delete">X</button>
+                            </div>
+                        </div>`;
+                });
+            }
         }
 
         function renderApp() {
             if (!appData) return;
             const isTvMode = window.location.hash === '#tv';
             
+            // Top UI Updates
+            document.getElementById('header-title').innerText = appData.settings.title || "Simple Live Tally";
+            document.getElementById('leaderboard-title').innerText = appData.settings.title || "Live Leaderboard";
+            
+            const headLogo = document.getElementById('header-logo');
+            if (appData.settings.logoUrl && !isTvMode) {
+                headLogo.src = appData.settings.logoUrl;
+                headLogo.classList.remove('hidden');
+            } else { headLogo.classList.add('hidden'); }
+
             const eventSelect = document.getElementById('active-event-select');
             eventSelect.innerHTML = '';
             let activeEvent = null;
@@ -590,20 +765,23 @@
             if (activeEvent && activeEvent.goalAmount && activeEvent.goalAmount > 0) {
                 const goalAmount = parseFloat(activeEvent.goalAmount);
                 const gaugePercentage = Math.min((totalRaised / goalAmount) * 100, 100);
-                const dashArray = 125.66; // PI * 40
+                const dashArray = 125.66; 
                 const dashOffset = dashArray - (dashArray * gaugePercentage / 100);
                 
                 const gaugeSize = isTvMode ? 'w-80 h-40' : 'w-48 h-24';
                 const textSize = isTvMode ? 'text-4xl' : 'text-xl';
                 const labelSize = isTvMode ? 'text-lg text-gray-400' : 'text-xs text-gray-500';
-                const valColor = isTvMode ? 'text-white' : 'text-gray-800';
-                const bgStroke = isTvMode ? '#374151' : '#e5e7eb'; // Dark vs Light track
+                const valColor = isTvMode ? 'text-white' : 'text-gray-800 dark:text-gray-200';
+                const bgStroke = isTvMode ? '#374151' : (document.documentElement.classList.contains('dark') ? '#374151' : '#e5e7eb');
+                const fgStroke = (appData.settings.themeColor && appData.settings.themeColor.includes('red')) ? '#ef4444' : 
+                                 (appData.settings.themeColor && appData.settings.themeColor.includes('green')) ? '#22c55e' : 
+                                 (appData.settings.themeColor && appData.settings.themeColor.includes('purple')) ? '#a855f7' : '#3b82f6';
 
                 gaugeContainer.innerHTML = `
                     <div class="relative ${gaugeSize}">
                         <svg viewBox="0 0 100 50" class="overflow-visible w-full h-full">
                             <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="${bgStroke}" stroke-width="10" stroke-linecap="round"></path>
-                            <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#3b82f6" stroke-width="10" stroke-linecap="round" 
+                            <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="${fgStroke}" stroke-width="10" stroke-linecap="round" 
                                   stroke-dasharray="${dashArray}" stroke-dashoffset="${dashOffset}" class="transition-all duration-1000 ease-out"></path>
                         </svg>
                         <div class="absolute bottom-0 left-0 right-0 text-center flex flex-col translate-y-2">
@@ -625,14 +803,14 @@
             const tagPadding = isTvMode ? 'py-2 px-6 text-2xl' : 'py-1 px-3 text-sm';
             const valSize = isTvMode ? 'text-4xl' : 'text-sm';
             const barHeight = isTvMode ? 'h-16 mb-8' : 'h-6 mb-4';
-            const badgeBg = isTvMode ? 'bg-gray-800 text-gray-200 border border-gray-700' : 'bg-white text-gray-700 border border-gray-200';
-            const valColor = isTvMode ? 'text-white' : 'text-gray-800';
-            const trackBg = isTvMode ? 'bg-gray-800' : 'bg-gray-200';
+            const badgeBg = isTvMode ? 'bg-gray-800 text-gray-200 border border-gray-700' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700';
+            const valColor = isTvMode ? 'text-white' : 'text-gray-800 dark:text-white';
+            const trackBg = isTvMode ? 'bg-gray-800' : 'bg-gray-200 dark:bg-gray-700';
 
             sortedEntities.forEach(ent => {
                 const amount = totals[ent.id];
                 const percentage = Math.min((amount / maxTotal) * 100, 100);
-                const imgHtml = ent.imageUrl ? `<img src="${ent.imageUrl}" class="w-8 h-8 rounded-full mr-2 inline-block object-cover border border-gray-300">` : '';
+                const imgHtml = ent.imageUrl ? `<img src="${ent.imageUrl}" class="w-8 h-8 rounded-full mr-2 inline-block object-cover border border-gray-300 dark:border-gray-600">` : '';
 
                 board.innerHTML += `
                     <div class="relative pt-1">
