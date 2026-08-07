@@ -24,9 +24,9 @@
         </div>
 
         <!-- Login Section -->
-        <div id="login-section" class="p-8 text-center block">
+        <div id="login-section" class="p-8 text-center block my-auto">
             <p id="login-text" class="mb-4 text-gray-600">Connect to Dropbox to start tallying votes.</p>
-            <button onclick="startAuthFlow()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded shadow">
+            <button onclick="startAuthFlow()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded shadow-lg transition-transform hover:scale-105">
                 Authenticate with Dropbox
             </button>
         </div>
@@ -72,7 +72,7 @@
                     <div id="entry-message" class="text-sm mt-2 hidden font-medium"></div>
                 </div>
 
-                <!-- Leaderboard -->
+                <!-- Leaderboard & Gauge -->
                 <div class="flex flex-col flex-grow">
                     <div class="flex justify-between items-end mb-6 border-b border-gray-200 pb-2" id="leaderboard-header">
                         <div>
@@ -84,6 +84,10 @@
                             <div id="countdown" class="text-xs opacity-50 font-mono">Refreshing in 60s...</div>
                         </div>
                     </div>
+                    
+                    <!-- Goal Gauge Container -->
+                    <div id="goal-gauge-container" class="w-full flex justify-center mb-4 transition-all"></div>
+
                     <div id="leaderboard" class="space-y-4 flex-1">
                         <!-- Progress bars injected here -->
                     </div>
@@ -91,7 +95,7 @@
             </div>
 
             <!-- VIEW: MANAGEMENT -->
-            <div id="view-management" class="p-6 hidden flex-col bg-gray-50 flex-grow">
+            <div id="view-management" class="p-6 hidden flex-col bg-gray-50 flex-grow overflow-y-auto">
                 
                 <div class="flex justify-between items-center mb-6">
                     <h2 class="text-2xl font-bold">Data Management</h2>
@@ -114,6 +118,7 @@
                             <p class="text-xs font-bold text-gray-500 uppercase mb-2">Create New Event</p>
                             <input type="text" id="new-event-name" placeholder="Event Name" class="w-full p-2 border rounded text-sm mb-2">
                             <div class="flex gap-2 mb-2">
+                                <div class="flex-1"><label class="text-xs text-gray-500">Goal ($)</label><input type="number" id="new-event-goal" placeholder="Optional" class="w-full p-1 border rounded text-xs"></div>
                                 <div class="flex-1"><label class="text-xs text-gray-500">Start (Opt)</label><input type="datetime-local" id="new-event-start" class="w-full p-1 border rounded text-xs"></div>
                                 <div class="flex-1"><label class="text-xs text-gray-500">End (Opt)</label><input type="datetime-local" id="new-event-end" class="w-full p-1 border rounded text-xs"></div>
                             </div>
@@ -150,7 +155,7 @@
 
     <!-- Footer -->
     <footer id="main-footer" class="text-center text-sm text-gray-500 py-6 mt-auto">
-        <p class="font-medium">Simple Live Tally <span class="font-bold">v1.3.0</span></p>
+        <p class="font-medium">Simple Live Tally <span class="font-bold">v1.4.0</span></p>
         <p class="mt-2 space-x-2">
             <a href="https://github.com/adambeltz2/Simple-Live-Tally" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline">GitHub</a>
             <span>|</span>
@@ -174,7 +179,7 @@
         let countdownInterval = null;
 
         const defaultData = {
-            events: [ { id: "evt_" + Date.now(), name: "Inaugural Event", startDate: "", endDate: "" } ],
+            events: [ { id: "evt_" + Date.now(), name: "Inaugural Event", goalAmount: null, startDate: "", endDate: "" } ],
             activeEventId: "", 
             entities: [
                 { id: "ent_1", namePublic: "Team Alpha", namePrivate: "Internal Alpha", imageUrl: "", color: "bg-red-500" },
@@ -239,6 +244,7 @@
                 body.classList.replace('text-white', 'text-gray-800');
                 container.classList.replace('max-w-full', 'max-w-4xl');
                 container.classList.replace('my-0', 'my-6');
+                container.classList.replace('bg-white', 'bg-white'); // Fallback fix
                 container.classList.replace('bg-gray-900', 'bg-white');
                 container.classList.replace('shadow-none', 'shadow-md');
                 container.classList.remove('h-screen', 'p-8', 'rounded-none');
@@ -301,12 +307,22 @@
             }
         }
 
+        function handleAuthFailure() {
+            window.localStorage.removeItem('dropbox_token');
+            accessToken = null;
+            if(countdownInterval) clearInterval(countdownInterval);
+            alert("Your Dropbox session has expired or the token is invalid. Please sign in again.");
+            window.location.reload();
+        }
+
         async function fetchState() {
             try {
                 const response = await fetch('https://content.dropboxapi.com/2/files/download', {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${accessToken}`, 'Dropbox-API-Arg': JSON.stringify({ path: FILE_PATH }) }
                 });
+                
+                if (response.status === 401) { return handleAuthFailure(); }
                 if (response.status === 409) { 
                     appData = defaultData;
                     if(!appData.activeEventId) appData.activeEventId = appData.events[0].id;
@@ -314,6 +330,7 @@
                     return;
                 }
                 if (!response.ok) throw new Error('Failed to fetch from Dropbox');
+                
                 currentRev = JSON.parse(response.headers.get('Dropbox-API-Result')).rev;
                 appData = await response.json();
                 
@@ -335,7 +352,9 @@
                 },
                 body: JSON.stringify(appData)
             });
-            if (response.status === 409) return false; 
+            if (response.status === 401) { handleAuthFailure(); return false; }
+            if (response.status === 409) { return false; } // Conflict
+            
             currentRev = (await response.json()).rev;
             return true;
         }
@@ -344,24 +363,12 @@
         
         async function exportDataZip() {
             if (!appData) return alert("No data available to export.");
-            
-            // Format Date: YYYY-MM-DD_HH-MM-SS
             const now = new Date();
-            const dateStr = now.getFullYear() + '-' + 
-                String(now.getMonth() + 1).padStart(2, '0') + '-' + 
-                String(now.getDate()).padStart(2, '0') + '_' + 
-                String(now.getHours()).padStart(2, '0') + '-' + 
-                String(now.getMinutes()).padStart(2, '0') + '-' + 
-                String(now.getSeconds()).padStart(2, '0');
-            
-            // Generate Zip
+            const dateStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0') + '_' + String(now.getHours()).padStart(2, '0') + '-' + String(now.getMinutes()).padStart(2, '0') + '-' + String(now.getSeconds()).padStart(2, '0');
             const zip = new JSZip();
             zip.file("data.json", JSON.stringify(appData, null, 2));
-            
             const blob = await zip.generateAsync({ type: "blob" });
             const url = URL.createObjectURL(blob);
-            
-            // Trigger Download
             const a = document.createElement("a");
             a.href = url;
             a.download = `SimpleLiveTally_Export_${dateStr}.zip`;
@@ -384,24 +391,33 @@
             const name = document.getElementById('new-event-name').value;
             const startDate = document.getElementById('new-event-start').value;
             const endDate = document.getElementById('new-event-end').value;
+            const goalAmount = parseFloat(document.getElementById('new-event-goal').value) || null;
             if (!name) return alert("Event Name required.");
             updateDataWrapper(() => {
                 const newId = 'evt_' + Date.now();
-                appData.events.push({ id: newId, name, startDate, endDate });
+                appData.events.push({ id: newId, name, goalAmount, startDate, endDate });
                 appData.activeEventId = newId;
             });
             document.getElementById('new-event-name').value = '';
+            document.getElementById('new-event-goal').value = '';
             document.getElementById('new-event-start').value = '';
             document.getElementById('new-event-end').value = '';
         }
 
         function editEvent(id) {
+            // Capture the values BEFORE the wrapper updates the UI
+            const newName = document.getElementById(`ev-name-${id}`).value;
+            const newGoal = parseFloat(document.getElementById(`ev-goal-${id}`).value) || null;
+            const newStart = document.getElementById(`ev-start-${id}`).value;
+            const newEnd = document.getElementById(`ev-end-${id}`).value;
+            
             updateDataWrapper(() => {
                 const ev = appData.events.find(e => e.id === id);
                 if(ev) {
-                    ev.name = document.getElementById(`ev-name-${id}`).value;
-                    ev.startDate = document.getElementById(`ev-start-${id}`).value;
-                    ev.endDate = document.getElementById(`ev-end-${id}`).value;
+                    ev.name = newName;
+                    ev.goalAmount = newGoal;
+                    ev.startDate = newStart;
+                    ev.endDate = newEnd;
                 }
             });
         }
@@ -423,20 +439,26 @@
         }
 
         function editEntity(id) {
+            // Capture values BEFORE wrapper
+            const newPub = document.getElementById(`ent-pub-${id}`).value;
+            const newPriv = document.getElementById(`ent-priv-${id}`).value;
+            const newImg = document.getElementById(`ent-img-${id}`).value;
+            const newCol = document.getElementById(`ent-col-${id}`).value;
+            
             updateDataWrapper(() => {
                 const ent = appData.entities.find(e => e.id === id);
                 if(ent) {
-                    ent.namePublic = document.getElementById(`ent-pub-${id}`).value;
-                    ent.namePrivate = document.getElementById(`ent-priv-${id}`).value;
-                    ent.imageUrl = document.getElementById(`ent-img-${id}`).value;
-                    ent.color = document.getElementById(`ent-col-${id}`).value;
+                    ent.namePublic = newPub;
+                    ent.namePrivate = newPriv;
+                    ent.imageUrl = newImg;
+                    ent.color = newCol;
                 }
             });
         }
 
         async function changeActiveEvent() {
-            const select = document.getElementById('active-event-select');
-            updateDataWrapper(() => { appData.activeEventId = select.value; });
+            const newActiveId = document.getElementById('active-event-select').value;
+            updateDataWrapper(() => { appData.activeEventId = newActiveId; });
         }
 
         function submitTransaction() {
@@ -502,8 +524,9 @@
                     <div class="bg-white p-3 rounded border shadow-sm">
                         <input type="text" id="ev-name-${ev.id}" value="${ev.name}" class="w-full p-2 border rounded text-sm mb-2 font-semibold">
                         <div class="flex gap-2 mb-2">
-                            <div class="flex-1"><label class="text-xs text-gray-500">Start</label><input type="datetime-local" id="ev-start-${ev.id}" value="${ev.startDate}" class="w-full p-1 border rounded text-xs"></div>
-                            <div class="flex-1"><label class="text-xs text-gray-500">End</label><input type="datetime-local" id="ev-end-${ev.id}" value="${ev.endDate}" class="w-full p-1 border rounded text-xs"></div>
+                            <div class="flex-1"><label class="text-xs text-gray-500">Goal ($)</label><input type="number" id="ev-goal-${ev.id}" value="${ev.goalAmount || ''}" class="w-full p-1 border rounded text-xs"></div>
+                            <div class="flex-1"><label class="text-xs text-gray-500">Start</label><input type="datetime-local" id="ev-start-${ev.id}" value="${ev.startDate || ''}" class="w-full p-1 border rounded text-xs"></div>
+                            <div class="flex-1"><label class="text-xs text-gray-500">End</label><input type="datetime-local" id="ev-end-${ev.id}" value="${ev.endDate || ''}" class="w-full p-1 border rounded text-xs"></div>
                         </div>
                         <button onclick="editEvent('${ev.id}')" class="text-xs bg-gray-200 hover:bg-gray-300 font-semibold py-1 px-3 rounded">Save Changes</button>
                     </div>`;
@@ -535,14 +558,14 @@
             
             const eventSelect = document.getElementById('active-event-select');
             eventSelect.innerHTML = '';
-            let activeEventName = "Unknown Event";
+            let activeEvent = null;
             appData.events.forEach(evt => {
                 const opt = document.createElement('option');
                 opt.value = evt.id; opt.text = evt.name;
-                if (evt.id === appData.activeEventId) { opt.selected = true; activeEventName = evt.name; }
+                if (evt.id === appData.activeEventId) { opt.selected = true; activeEvent = evt; }
                 eventSelect.appendChild(opt);
             });
-            document.getElementById('leaderboard-subtitle').innerText = `Active Event: ${activeEventName}`;
+            document.getElementById('leaderboard-subtitle').innerText = `Active Event: ${activeEvent ? activeEvent.name : 'Unknown'}`;
 
             const entitySelect = document.getElementById('entity-select');
             entitySelect.innerHTML = '';
@@ -559,6 +582,43 @@
 
             const sortedEntities = [...appData.entities].sort((a, b) => totals[b.id] - totals[a.id]);
             const maxTotal = Math.max(...Object.values(totals), 10);
+            
+            // --- Render Goal Gauge ---
+            const gaugeContainer = document.getElementById('goal-gauge-container');
+            const totalRaised = Object.values(totals).reduce((sum, val) => sum + val, 0);
+            
+            if (activeEvent && activeEvent.goalAmount && activeEvent.goalAmount > 0) {
+                const goalAmount = parseFloat(activeEvent.goalAmount);
+                const gaugePercentage = Math.min((totalRaised / goalAmount) * 100, 100);
+                const dashArray = 125.66; // PI * 40
+                const dashOffset = dashArray - (dashArray * gaugePercentage / 100);
+                
+                const gaugeSize = isTvMode ? 'w-80 h-40' : 'w-48 h-24';
+                const textSize = isTvMode ? 'text-4xl' : 'text-xl';
+                const labelSize = isTvMode ? 'text-lg text-gray-400' : 'text-xs text-gray-500';
+                const valColor = isTvMode ? 'text-white' : 'text-gray-800';
+                const bgStroke = isTvMode ? '#374151' : '#e5e7eb'; // Dark vs Light track
+
+                gaugeContainer.innerHTML = `
+                    <div class="relative ${gaugeSize}">
+                        <svg viewBox="0 0 100 50" class="overflow-visible w-full h-full">
+                            <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="${bgStroke}" stroke-width="10" stroke-linecap="round"></path>
+                            <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#3b82f6" stroke-width="10" stroke-linecap="round" 
+                                  stroke-dasharray="${dashArray}" stroke-dashoffset="${dashOffset}" class="transition-all duration-1000 ease-out"></path>
+                        </svg>
+                        <div class="absolute bottom-0 left-0 right-0 text-center flex flex-col translate-y-2">
+                            <span class="font-bold ${textSize} ${valColor}">$${totalRaised.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                            <span class="uppercase font-semibold tracking-wide ${labelSize}">of $${goalAmount.toLocaleString()}</span>
+                        </div>
+                    </div>
+                `;
+                gaugeContainer.classList.remove('hidden');
+            } else {
+                gaugeContainer.innerHTML = '';
+                gaugeContainer.classList.add('hidden');
+            }
+
+            // --- Render Leaderboard Bars ---
             const board = document.getElementById('leaderboard');
             board.innerHTML = '';
 
