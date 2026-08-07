@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-08-07
+### Added
+- **Global Settings Module:** Administrators can now customize the Dashboard Title, provide a Logo URL, and select a Theme Color (Blue, Red, Green, Purple, Dark) to brand the application.
+- **Transaction Management:** Added a scrollable transaction log for the active event in the Data Management tab. Administrators can now edit the dollar amounts of historical transactions or permanently delete them.
+- **Event Purging:** Added a "Purge Event & Data" capability that permanently deletes an event and all its associated transactions, with a built-in safety prompt to export a ZIP backup first.
+- **Dark Mode:** Integrated a manual Dark Mode toggle in the header that seamlessly themes the entire application UI and remembers user preference via local storage. 
+- **UI Enhancements:** Improved text input visibility with thicker borders, interior shadows, and active focus rings. 
+
 ## [1.4.0] - 2026-08-07
 ### Added
 - Optional goal amounts for Events.
