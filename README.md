@@ -9,8 +9,10 @@
 * **Serverless & Zero Maintenance:** Hosted for free on GitHub Pages with no backend server or database infrastructure required.
 * **Dropbox App Folder Integration:** Authenticates securely via OAuth 2.0 PKCE. Data is safely stored in a single `data.json` file inside your Dropbox `/Apps/Simple Live Tally/` folder.
 * **Live Dashboard & Leaderboard:** Automatically polls Dropbox every 60 seconds to update totals, re-sort leaders dynamically, and render smooth progress bars.
-* **Dedicated TV / Projector Display Mode:** Append `#tv` to the URL to instantly switch to a high-contrast dark mode with scaled-up typography designed for large presentation screens.
-* **Full Data Management:** Easily create and edit Events and Entities (Teams/Items) directly from the browser UI.
+* **Dynamic Event Goals:** Set financial goals for your events and watch an animated SVG Gauge Chart fill up in real-time. 
+* **Custom Branding & Dark Mode:** Toggle between light and dark themes, upload a custom logo, and inject your own custom title and primary brand colors directly from the UI.
+* **Dedicated TV / Projector Display Mode:** Append `#tv` to the URL to instantly switch to a high-contrast mode with scaled-up typography designed for large presentation screens.
+* **Full Data Management:** Easily create and edit Events and Entities (Teams/Items) directly from the browser UI. Review, modify, or delete individual transactions on the fly. 
 * **Event Countdown Timers:** Real-time countdown clock tracking down to active event end times.
 * **Point-in-Time Backups:** Instantly export your entire database as a timestamped `.zip` package (`SimpleLiveTally_Export_YYYY-MM-DD_HH-MM-SS.zip`) right from the management panel.
 
