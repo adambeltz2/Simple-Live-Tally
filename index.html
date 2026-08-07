@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Simple Live Tally</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body id="body" class="bg-gray-100 text-gray-800 font-sans transition-colors duration-300 min-h-screen flex flex-col">
 
-    <div id="main-container" class="max-w-4xl mx-auto my-6 flex-grow w-full bg-white rounded-lg shadow-md overflow-hidden transition-all duration-300">
+    <div id="main-container" class="max-w-4xl mx-auto my-6 flex-grow w-full bg-white rounded-lg shadow-md overflow-hidden transition-all duration-300 flex flex-col">
         
         <!-- Header -->
         <div id="main-header" class="bg-blue-600 p-4 text-white flex justify-between items-center">
@@ -31,55 +32,30 @@
         </div>
 
         <!-- App Section -->
-        <div id="app-section" class="p-6 hidden h-full flex-col">
+        <div id="app-section" class="hidden flex-col h-full flex-grow">
             
-            <!-- ADMIN CONTROLS (Hidden in TV Mode) -->
-            <div id="admin-controls">
+            <!-- Navigation Tabs -->
+            <div id="app-nav" class="bg-gray-100 border-b flex p-2 gap-2">
+                <button onclick="switchTab('dashboard')" id="tab-dashboard" class="px-4 py-2 rounded font-semibold text-sm transition-colors bg-blue-600 text-white shadow-sm">
+                    Live Dashboard
+                </button>
+                <button onclick="switchTab('management')" id="tab-management" class="px-4 py-2 rounded font-semibold text-sm transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300">
+                    Data Management
+                </button>
+            </div>
+
+            <!-- VIEW: DASHBOARD -->
+            <div id="view-dashboard" class="p-6 flex flex-col flex-grow">
                 
-                <!-- Setup & Configuration Grid -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                    
-                    <!-- Event Management -->
-                    <div class="p-4 bg-gray-50 border rounded-lg">
-                        <h3 class="text-lg font-semibold mb-3 border-b pb-2">Event Configuration</h3>
-                        
-                        <div class="mb-4">
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Active Event</label>
-                            <select id="active-event-select" onchange="changeActiveEvent()" class="w-full p-2 border rounded shadow-sm bg-white"></select>
-                        </div>
-                        
-                        <div class="space-y-2 border-t pt-3">
-                            <p class="text-sm font-medium text-gray-600">Create New Event</p>
-                            <input type="text" id="new-event-name" placeholder="Event Name" class="w-full p-2 border rounded shadow-sm text-sm">
-                            <div class="flex gap-2">
-                                <input type="date" id="new-event-start" class="w-full p-2 border rounded shadow-sm text-sm" title="Start Date">
-                                <input type="date" id="new-event-end" class="w-full p-2 border rounded shadow-sm text-sm" title="End Date">
-                            </div>
-                            <button onclick="addEvent()" class="w-full bg-gray-800 hover:bg-gray-900 text-white font-semibold py-1.5 rounded shadow-sm text-sm">
-                                Create Event
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Entity Management -->
-                    <div class="p-4 bg-gray-50 border rounded-lg">
-                        <h3 class="text-lg font-semibold mb-3 border-b pb-2">Entity Management</h3>
-                        <div class="space-y-2">
-                            <p class="text-sm font-medium text-gray-600">Register New Entity</p>
-                            <input type="text" id="new-ent-public" placeholder="Public Name (e.g. Team Alpha)" class="w-full p-2 border rounded shadow-sm text-sm">
-                            <input type="text" id="new-ent-private" placeholder="Private Name (Optional)" class="w-full p-2 border rounded shadow-sm text-sm">
-                            <input type="url" id="new-ent-img" placeholder="Image URL (Optional)" class="w-full p-2 border rounded shadow-sm text-sm">
-                            <button onclick="addEntity()" class="w-full bg-gray-800 hover:bg-gray-900 text-white font-semibold py-1.5 rounded shadow-sm text-sm">
-                                Add Entity
-                            </button>
-                        </div>
-                    </div>
-
-                </div>
-
                 <!-- Transaction Entry -->
-                <div class="mb-8 p-4 bg-blue-50 border border-blue-100 rounded-lg shadow-sm">
-                    <h2 class="text-xl font-semibold mb-4 text-blue-900">Add Transaction</h2>
+                <div id="admin-controls" class="mb-8 p-4 bg-blue-50 border border-blue-100 rounded-lg shadow-sm">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold text-blue-900">Add Transaction</h2>
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm font-medium text-blue-800">Event:</span>
+                            <select id="active-event-select" onchange="changeActiveEvent()" class="text-sm p-1 border rounded shadow-sm bg-white"></select>
+                        </div>
+                    </div>
                     <div class="flex flex-wrap gap-4 items-end">
                         <div class="flex-1 min-w-[200px]">
                             <label class="block text-sm font-medium text-gray-700 mb-1">Entity</label>
@@ -96,19 +72,76 @@
                     <div id="entry-message" class="text-sm mt-2 hidden font-medium"></div>
                 </div>
 
+                <!-- Leaderboard -->
+                <div class="flex flex-col flex-grow">
+                    <div class="flex justify-between items-end mb-6 border-b border-gray-200 pb-2" id="leaderboard-header">
+                        <div>
+                            <h2 id="leaderboard-title" class="text-xl font-semibold transition-all">Live Leaderboard</h2>
+                            <p id="leaderboard-subtitle" class="text-sm text-gray-500 font-medium"></p>
+                        </div>
+                        <div class="text-right">
+                            <div id="event-countdown" class="text-sm font-bold text-blue-600 mb-1 hidden transition-all"></div>
+                            <div id="countdown" class="text-xs opacity-50 font-mono">Refreshing in 60s...</div>
+                        </div>
+                    </div>
+                    <div id="leaderboard" class="space-y-4 flex-1">
+                        <!-- Progress bars injected here -->
+                    </div>
+                </div>
             </div>
 
-            <!-- Leaderboard (Visible in both modes) -->
-            <div class="h-full flex flex-col flex-grow">
-                <div class="flex justify-between items-end mb-6 border-b border-gray-200 pb-2" id="leaderboard-header">
-                    <div>
-                        <h2 id="leaderboard-title" class="text-xl font-semibold transition-all">Live Leaderboard</h2>
-                        <p id="leaderboard-subtitle" class="text-sm text-gray-500 font-medium"></p>
-                    </div>
-                    <span id="countdown" class="text-sm opacity-50 font-mono">Refreshing in 60s...</span>
+            <!-- VIEW: MANAGEMENT -->
+            <div id="view-management" class="p-6 hidden flex-col bg-gray-50 flex-grow">
+                
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold">Data Management</h2>
+                    <button onclick="exportDataZip()" class="bg-gray-800 hover:bg-gray-900 text-white font-semibold py-2 px-4 rounded shadow-sm text-sm inline-flex items-center">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        Export Data (ZIP)
+                    </button>
                 </div>
-                <div id="leaderboard" class="space-y-4 flex-1">
-                    <!-- Progress bars injected here -->
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    
+                    <!-- Events List -->
+                    <div>
+                        <div class="flex justify-between items-center mb-4 border-b pb-2">
+                            <h3 class="text-lg font-semibold">Events</h3>
+                        </div>
+                        
+                        <!-- New Event Inline -->
+                        <div class="bg-white p-3 rounded border shadow-sm mb-4">
+                            <p class="text-xs font-bold text-gray-500 uppercase mb-2">Create New Event</p>
+                            <input type="text" id="new-event-name" placeholder="Event Name" class="w-full p-2 border rounded text-sm mb-2">
+                            <div class="flex gap-2 mb-2">
+                                <div class="flex-1"><label class="text-xs text-gray-500">Start (Opt)</label><input type="datetime-local" id="new-event-start" class="w-full p-1 border rounded text-xs"></div>
+                                <div class="flex-1"><label class="text-xs text-gray-500">End (Opt)</label><input type="datetime-local" id="new-event-end" class="w-full p-1 border rounded text-xs"></div>
+                            </div>
+                            <button onclick="addEvent()" class="w-full bg-blue-600 text-white font-semibold py-1.5 rounded text-sm hover:bg-blue-700">Add Event</button>
+                        </div>
+
+                        <!-- Existing Events -->
+                        <div id="events-list" class="space-y-3"></div>
+                    </div>
+
+                    <!-- Entities List -->
+                    <div>
+                        <div class="flex justify-between items-center mb-4 border-b pb-2">
+                            <h3 class="text-lg font-semibold">Entities (Teams/Items)</h3>
+                        </div>
+
+                        <!-- New Entity Inline -->
+                        <div class="bg-white p-3 rounded border shadow-sm mb-4">
+                            <p class="text-xs font-bold text-gray-500 uppercase mb-2">Register New Entity</p>
+                            <input type="text" id="new-ent-public" placeholder="Public Name" class="w-full p-2 border rounded text-sm mb-2">
+                            <input type="text" id="new-ent-private" placeholder="Private Name (Optional)" class="w-full p-2 border rounded text-sm mb-2">
+                            <input type="url" id="new-ent-img" placeholder="Image URL (Optional)" class="w-full p-2 border rounded text-sm mb-2">
+                            <button onclick="addEntity()" class="w-full bg-blue-600 text-white font-semibold py-1.5 rounded text-sm hover:bg-blue-700">Add Entity</button>
+                        </div>
+
+                        <!-- Existing Entities -->
+                        <div id="entities-list" class="space-y-3"></div>
+                    </div>
                 </div>
             </div>
 
@@ -117,7 +150,7 @@
 
     <!-- Footer -->
     <footer id="main-footer" class="text-center text-sm text-gray-500 py-6 mt-auto">
-        <p class="font-medium">Simple Live Tally <span class="font-bold">v1.1.0</span></p>
+        <p class="font-medium">Simple Live Tally <span class="font-bold">v1.3.0</span></p>
         <p class="mt-2 space-x-2">
             <a href="https://github.com/adambeltz2/Simple-Live-Tally" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline">GitHub</a>
             <span>|</span>
@@ -138,13 +171,11 @@
         let currentRev = null;
         let appData = null;
         let refreshTimer = 60;
+        let countdownInterval = null;
 
-        // Structured Schema Initialization
         const defaultData = {
-            events: [
-                { id: "evt_" + Date.now(), name: "Inaugural Event", startDate: "", endDate: "" }
-            ],
-            activeEventId: "", // Assigned dynamically on load if empty
+            events: [ { id: "evt_" + Date.now(), name: "Inaugural Event", startDate: "", endDate: "" } ],
+            activeEventId: "", 
             entities: [
                 { id: "ent_1", namePublic: "Team Alpha", namePrivate: "Internal Alpha", imageUrl: "", color: "bg-red-500" },
                 { id: "ent_2", namePublic: "Team Beta", namePrivate: "Internal Beta", imageUrl: "", color: "bg-blue-500" }
@@ -154,18 +185,36 @@
 
         const colors = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500', 'bg-pink-500', 'bg-indigo-500', 'bg-teal-500', 'bg-orange-500'];
 
-        // --- VIEW MODE MANAGEMENT (ADMIN vs TV) ---
+        // --- VIEW MODE MANAGEMENT ---
+        function switchTab(tab) {
+            document.getElementById('view-dashboard').classList.toggle('hidden', tab !== 'dashboard');
+            document.getElementById('view-management').classList.toggle('hidden', tab !== 'management');
+            
+            document.getElementById('tab-dashboard').className = tab === 'dashboard' 
+                ? 'px-4 py-2 rounded font-semibold text-sm transition-colors bg-blue-600 text-white shadow-sm'
+                : 'px-4 py-2 rounded font-semibold text-sm transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300';
+                
+            document.getElementById('tab-management').className = tab === 'management' 
+                ? 'px-4 py-2 rounded font-semibold text-sm transition-colors bg-blue-600 text-white shadow-sm'
+                : 'px-4 py-2 rounded font-semibold text-sm transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300';
+
+            if (tab === 'management') renderManagement();
+        }
+
         function checkViewMode() {
             const isTvMode = window.location.hash === '#tv';
             const body = document.getElementById('body');
             const container = document.getElementById('main-container');
             const header = document.getElementById('main-header');
+            const nav = document.getElementById('app-nav');
             const adminControls = document.getElementById('admin-controls');
             const title = document.getElementById('leaderboard-title');
             const subtitle = document.getElementById('leaderboard-subtitle');
             const leaderboardHeader = document.getElementById('leaderboard-header');
+            const countdownDisplay = document.getElementById('event-countdown');
             
             if (isTvMode) {
+                switchTab('dashboard');
                 body.classList.replace('bg-gray-100', 'bg-gray-900');
                 body.classList.replace('text-gray-800', 'text-white');
                 container.classList.replace('max-w-4xl', 'max-w-full');
@@ -175,12 +224,16 @@
                 container.classList.add('h-screen', 'p-8', 'rounded-none');
                 
                 header.classList.add('hidden');
+                nav.classList.add('hidden');
                 adminControls.classList.add('hidden');
                 leaderboardHeader.classList.replace('border-gray-200', 'border-gray-700');
                 
                 title.classList.replace('text-xl', 'text-5xl');
                 subtitle.classList.replace('text-gray-500', 'text-gray-400');
                 subtitle.classList.add('text-xl', 'mt-2');
+                
+                countdownDisplay.classList.replace('text-blue-600', 'text-blue-400');
+                countdownDisplay.classList.replace('text-sm', 'text-2xl');
             } else {
                 body.classList.replace('bg-gray-900', 'bg-gray-100');
                 body.classList.replace('text-white', 'text-gray-800');
@@ -191,12 +244,16 @@
                 container.classList.remove('h-screen', 'p-8', 'rounded-none');
                 
                 header.classList.remove('hidden');
+                nav.classList.remove('hidden');
                 adminControls.classList.remove('hidden');
                 leaderboardHeader.classList.replace('border-gray-700', 'border-gray-200');
                 
                 title.classList.replace('text-5xl', 'text-xl');
                 subtitle.classList.replace('text-gray-400', 'text-gray-500');
                 subtitle.classList.remove('text-xl', 'mt-2');
+                
+                countdownDisplay.classList.replace('text-blue-400', 'text-blue-600');
+                countdownDisplay.classList.replace('text-2xl', 'text-sm');
             }
 
             if (appData) renderApp();
@@ -204,49 +261,38 @@
 
         window.addEventListener('hashchange', checkViewMode);
 
-        // --- AUTHENTICATION (PKCE FLOW) ---
+        // --- AUTHENTICATION & DROPBOX ---
         function generateRandomString(length) {
             const array = new Uint32Array(length / 2);
             window.crypto.getRandomValues(array);
             return Array.from(array, dec => ('0' + dec.toString(16)).substr(-2)).join('');
         }
-
         async function generateCodeChallenge(codeVerifier) {
             const encoder = new TextEncoder();
             const data = encoder.encode(codeVerifier);
             const digest = await window.crypto.subtle.digest('SHA-256', data);
-            return btoa(String.fromCharCode.apply(null, new Uint8Array(digest)))
-                .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            return btoa(String.fromCharCode.apply(null, new Uint8Array(digest))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
         }
-
         async function startAuthFlow() {
             const codeVerifier = generateRandomString(64);
             window.localStorage.setItem('pkce_verifier', codeVerifier);
             const codeChallenge = await generateCodeChallenge(codeVerifier);
-            const authUrl = `https://www.dropbox.com/oauth2/authorize?client_id=${CLIENT_ID}&response_type=code&code_challenge=${codeChallenge}&code_challenge_method=S256&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
-            window.location.href = authUrl;
+            window.location.href = `https://www.dropbox.com/oauth2/authorize?client_id=${CLIENT_ID}&response_type=code&code_challenge=${codeChallenge}&code_challenge_method=S256&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
         }
-
         async function handleAuthRedirect() {
             const params = new URLSearchParams(window.location.search);
             const code = params.get('code');
             if (code) {
                 const newUrl = window.location.pathname + window.location.hash;
                 window.history.replaceState({}, document.title, newUrl); 
-                const codeVerifier = window.localStorage.getItem('pkce_verifier');
-                
                 const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: new URLSearchParams({
-                        client_id: CLIENT_ID,
-                        grant_type: 'authorization_code',
-                        code: code,
-                        redirect_uri: REDIRECT_URI,
-                        code_verifier: codeVerifier
+                        client_id: CLIENT_ID, grant_type: 'authorization_code', code: code,
+                        redirect_uri: REDIRECT_URI, code_verifier: window.localStorage.getItem('pkce_verifier')
                     })
                 });
-
                 const data = await response.json();
                 if (data.access_token) {
                     window.localStorage.setItem('dropbox_token', data.access_token);
@@ -255,37 +301,28 @@
             }
         }
 
-        // --- DROPBOX FILE OPERATIONS ---
         async function fetchState() {
             try {
                 const response = await fetch('https://content.dropboxapi.com/2/files/download', {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${accessToken}`,
-                        'Dropbox-API-Arg': JSON.stringify({ path: FILE_PATH })
-                    }
+                    headers: { 'Authorization': `Bearer ${accessToken}`, 'Dropbox-API-Arg': JSON.stringify({ path: FILE_PATH }) }
                 });
-
                 if (response.status === 409) { 
                     appData = defaultData;
                     if(!appData.activeEventId) appData.activeEventId = appData.events[0].id;
                     await saveState();
                     return;
                 }
-                
                 if (!response.ok) throw new Error('Failed to fetch from Dropbox');
-
                 currentRev = JSON.parse(response.headers.get('Dropbox-API-Result')).rev;
                 appData = await response.json();
                 
-                // Fallback for migrations
-                if(!appData.events) appData = { ...defaultData, ...appData, events: defaultData.events };
+                if(!appData.events) appData.events = defaultData.events;
                 if(!appData.activeEventId && appData.events.length > 0) appData.activeEventId = appData.events[0].id;
                 
                 renderApp();
-            } catch (error) {
-                console.error("Error fetching state:", error);
-            }
+                if(!document.getElementById('view-management').classList.contains('hidden')) renderManagement();
+            } catch (error) { console.error("Error fetching state:", error); }
         }
 
         async function saveState() {
@@ -293,169 +330,238 @@
             const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': 'application/octet-stream',
-                    'Dropbox-API-Arg': JSON.stringify({
-                        path: FILE_PATH,
-                        mode: mode,
-                        autorename: false,
-                        mute: true
-                    })
+                    'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/octet-stream',
+                    'Dropbox-API-Arg': JSON.stringify({ path: FILE_PATH, mode: mode, autorename: false, mute: true })
                 },
                 body: JSON.stringify(appData)
             });
-
             if (response.status === 409) return false; 
-            const result = await response.json();
-            currentRev = result.rev;
+            currentRev = (await response.json()).rev;
             return true;
         }
 
-        // --- DATA MANAGEMENT LOGIC ---
+        // --- DATA MANAGEMENT & EXPORT LOGIC ---
+        
+        async function exportDataZip() {
+            if (!appData) return alert("No data available to export.");
+            
+            // Format Date: YYYY-MM-DD_HH-MM-SS
+            const now = new Date();
+            const dateStr = now.getFullYear() + '-' + 
+                String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                String(now.getDate()).padStart(2, '0') + '_' + 
+                String(now.getHours()).padStart(2, '0') + '-' + 
+                String(now.getMinutes()).padStart(2, '0') + '-' + 
+                String(now.getSeconds()).padStart(2, '0');
+            
+            // Generate Zip
+            const zip = new JSZip();
+            zip.file("data.json", JSON.stringify(appData, null, 2));
+            
+            const blob = await zip.generateAsync({ type: "blob" });
+            const url = URL.createObjectURL(blob);
+            
+            // Trigger Download
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `SimpleLiveTally_Export_${dateStr}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
 
-        async function addEvent() {
+        async function updateDataWrapper(updateFn) {
+            await fetchState();
+            updateFn();
+            const success = await saveState();
+            if(!success) { alert("Data conflict. Retrying..."); await updateDataWrapper(updateFn); return; }
+            renderApp();
+            renderManagement();
+        }
+
+        function addEvent() {
             const name = document.getElementById('new-event-name').value;
             const startDate = document.getElementById('new-event-start').value;
             const endDate = document.getElementById('new-event-end').value;
-            
-            if (!name) return alert("Event Name is required.");
-            
-            await fetchState();
-            const newId = 'evt_' + Date.now();
-            appData.events.push({ id: newId, name, startDate, endDate });
-            appData.activeEventId = newId; // Auto switch to new event
-            await saveState();
-            
+            if (!name) return alert("Event Name required.");
+            updateDataWrapper(() => {
+                const newId = 'evt_' + Date.now();
+                appData.events.push({ id: newId, name, startDate, endDate });
+                appData.activeEventId = newId;
+            });
             document.getElementById('new-event-name').value = '';
             document.getElementById('new-event-start').value = '';
             document.getElementById('new-event-end').value = '';
-            renderApp();
         }
 
-        async function addEntity() {
+        function editEvent(id) {
+            updateDataWrapper(() => {
+                const ev = appData.events.find(e => e.id === id);
+                if(ev) {
+                    ev.name = document.getElementById(`ev-name-${id}`).value;
+                    ev.startDate = document.getElementById(`ev-start-${id}`).value;
+                    ev.endDate = document.getElementById(`ev-end-${id}`).value;
+                }
+            });
+        }
+
+        function addEntity() {
             const namePublic = document.getElementById('new-ent-public').value;
             const namePrivate = document.getElementById('new-ent-private').value;
             const imageUrl = document.getElementById('new-ent-img').value;
-            
-            if (!namePublic) return alert("Public Name is required.");
-            
-            await fetchState();
-            const randomColor = colors[Math.floor(Math.random() * colors.length)];
-            
-            appData.entities.push({ 
-                id: 'ent_' + Date.now(), 
-                namePublic, 
-                namePrivate, 
-                imageUrl, 
-                color: randomColor 
+            if (!namePublic) return alert("Public Name required.");
+            updateDataWrapper(() => {
+                appData.entities.push({ 
+                    id: 'ent_' + Date.now(), namePublic, namePrivate, imageUrl, 
+                    color: colors[Math.floor(Math.random() * colors.length)] 
+                });
             });
-            await saveState();
-            
             document.getElementById('new-ent-public').value = '';
             document.getElementById('new-ent-private').value = '';
             document.getElementById('new-ent-img').value = '';
-            renderApp();
+        }
+
+        function editEntity(id) {
+            updateDataWrapper(() => {
+                const ent = appData.entities.find(e => e.id === id);
+                if(ent) {
+                    ent.namePublic = document.getElementById(`ent-pub-${id}`).value;
+                    ent.namePrivate = document.getElementById(`ent-priv-${id}`).value;
+                    ent.imageUrl = document.getElementById(`ent-img-${id}`).value;
+                    ent.color = document.getElementById(`ent-col-${id}`).value;
+                }
+            });
         }
 
         async function changeActiveEvent() {
             const select = document.getElementById('active-event-select');
-            await fetchState();
-            appData.activeEventId = select.value;
-            await saveState();
-            renderApp();
+            updateDataWrapper(() => { appData.activeEventId = select.value; });
         }
 
-        async function submitTransaction() {
+        function submitTransaction() {
             const btn = document.getElementById('submit-btn');
             const msg = document.getElementById('entry-message');
             const entityId = document.getElementById('entity-select').value;
             const amount = parseFloat(document.getElementById('amount-input').value);
 
             if (!entityId || isNaN(amount)) return;
+            btn.disabled = true; btn.innerText = "Saving...";
 
-            btn.disabled = true;
-            btn.innerText = "Saving...";
-
-            await fetchState();
-
-            appData.transactions.push({
-                id: 'txn_' + Date.now(),
-                createDate: new Date().toISOString(),
-                modifiedDate: new Date().toISOString(),
-                entityId: entityId,
-                eventId: appData.activeEventId,
-                amount: amount
-            });
-
-            const success = await saveState();
-            
-            if (success) {
-                msg.textContent = "Transaction saved successfully.";
+            updateDataWrapper(() => {
+                appData.transactions.push({
+                    id: 'txn_' + Date.now(),
+                    createDate: new Date().toISOString(),
+                    modifiedDate: new Date().toISOString(),
+                    entityId: entityId,
+                    eventId: appData.activeEventId,
+                    amount: amount
+                });
+            }).then(() => {
+                msg.textContent = "Transaction saved.";
                 msg.className = "text-sm mt-2 text-green-600 block";
                 document.getElementById('amount-input').value = '';
-                renderApp(); 
-            } else {
-                msg.textContent = "Data conflict. Retrying automatically...";
-                msg.className = "text-sm mt-2 text-red-600 block";
-                setTimeout(() => submitTransaction(), 1000); 
-            }
-
-            setTimeout(() => { msg.className = "hidden"; }, 3000);
-            btn.disabled = false;
-            btn.innerText = "Submit Vote";
-            refreshTimer = 60;
+                setTimeout(() => { msg.className = "hidden"; }, 3000);
+                btn.disabled = false; btn.innerText = "Submit Vote";
+                refreshTimer = 60;
+            });
         }
 
         // --- RENDER LOGIC ---
+        function runCountdown() {
+            if (!appData || !appData.activeEventId) return;
+            const activeEvent = appData.events.find(e => e.id === appData.activeEventId);
+            const cd = document.getElementById('event-countdown');
+            
+            if (activeEvent && activeEvent.endDate) {
+                const diff = new Date(activeEvent.endDate).getTime() - new Date().getTime();
+                if (diff > 0) {
+                    const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+                    const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                    const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                    const s = Math.floor((diff % (1000 * 60)) / 1000);
+                    cd.innerText = `🏁 Ends in: ${d}d ${h}h ${m}m ${s}s`;
+                    cd.classList.remove('hidden');
+                } else {
+                    cd.innerText = `🏁 Event Ended`;
+                    cd.classList.remove('hidden');
+                }
+            } else {
+                cd.classList.add('hidden');
+            }
+        }
+
+        function renderManagement() {
+            if (!appData) return;
+            
+            // Render Events
+            const evList = document.getElementById('events-list');
+            evList.innerHTML = '';
+            appData.events.forEach(ev => {
+                evList.innerHTML += `
+                    <div class="bg-white p-3 rounded border shadow-sm">
+                        <input type="text" id="ev-name-${ev.id}" value="${ev.name}" class="w-full p-2 border rounded text-sm mb-2 font-semibold">
+                        <div class="flex gap-2 mb-2">
+                            <div class="flex-1"><label class="text-xs text-gray-500">Start</label><input type="datetime-local" id="ev-start-${ev.id}" value="${ev.startDate}" class="w-full p-1 border rounded text-xs"></div>
+                            <div class="flex-1"><label class="text-xs text-gray-500">End</label><input type="datetime-local" id="ev-end-${ev.id}" value="${ev.endDate}" class="w-full p-1 border rounded text-xs"></div>
+                        </div>
+                        <button onclick="editEvent('${ev.id}')" class="text-xs bg-gray-200 hover:bg-gray-300 font-semibold py-1 px-3 rounded">Save Changes</button>
+                    </div>`;
+            });
+
+            // Render Entities
+            const entList = document.getElementById('entities-list');
+            entList.innerHTML = '';
+            appData.entities.forEach(ent => {
+                const colorOptions = colors.map(c => `<option value="${c}" ${ent.color === c ? 'selected' : ''}>${c.replace('bg-','').replace('-500','')}</option>`).join('');
+                entList.innerHTML += `
+                    <div class="bg-white p-3 rounded border shadow-sm flex flex-col gap-2">
+                        <div class="flex gap-2">
+                            <input type="text" id="ent-pub-${ent.id}" value="${ent.namePublic}" class="flex-1 p-2 border rounded text-sm font-semibold" placeholder="Public Name">
+                            <input type="text" id="ent-priv-${ent.id}" value="${ent.namePrivate || ''}" class="flex-1 p-2 border rounded text-sm" placeholder="Private Name">
+                        </div>
+                        <div class="flex gap-2">
+                            <input type="url" id="ent-img-${ent.id}" value="${ent.imageUrl || ''}" class="flex-1 p-2 border rounded text-sm" placeholder="Image URL">
+                            <select id="ent-col-${ent.id}" class="p-2 border rounded text-sm ${ent.color} text-white">${colorOptions}</select>
+                        </div>
+                        <div><button onclick="editEntity('${ent.id}')" class="text-xs bg-gray-200 hover:bg-gray-300 font-semibold py-1 px-3 rounded">Save Changes</button></div>
+                    </div>`;
+            });
+        }
 
         function renderApp() {
             if (!appData) return;
             const isTvMode = window.location.hash === '#tv';
             
-            // 1. Populate Event Dropdown & Subtitle
             const eventSelect = document.getElementById('active-event-select');
             eventSelect.innerHTML = '';
             let activeEventName = "Unknown Event";
-            
             appData.events.forEach(evt => {
-                const option = document.createElement('option');
-                option.value = evt.id;
-                option.text = evt.name;
-                if (evt.id === appData.activeEventId) {
-                    option.selected = true;
-                    activeEventName = evt.name;
-                }
-                eventSelect.appendChild(option);
+                const opt = document.createElement('option');
+                opt.value = evt.id; opt.text = evt.name;
+                if (evt.id === appData.activeEventId) { opt.selected = true; activeEventName = evt.name; }
+                eventSelect.appendChild(opt);
             });
             document.getElementById('leaderboard-subtitle').innerText = `Active Event: ${activeEventName}`;
 
-            // 2. Populate Entity Dropdown
             const entitySelect = document.getElementById('entity-select');
             entitySelect.innerHTML = '';
             appData.entities.forEach(ent => {
-                const option = document.createElement('option');
-                option.value = ent.id;
-                option.text = ent.namePublic;
-                entitySelect.appendChild(option);
+                const opt = document.createElement('option');
+                opt.value = ent.id; opt.text = ent.namePublic;
+                entitySelect.appendChild(opt);
             });
 
-            // 3. Calculate Totals (Scoping to Active Event)
             const totals = {};
             appData.entities.forEach(e => totals[e.id] = 0);
-            
             const activeTransactions = appData.transactions.filter(t => t.eventId === appData.activeEventId);
-            activeTransactions.forEach(t => {
-                if(totals[t.entityId] !== undefined) totals[t.entityId] += t.amount;
-            });
+            activeTransactions.forEach(t => { if(totals[t.entityId] !== undefined) totals[t.entityId] += t.amount; });
 
-            // 4. Render Leaderboard
             const sortedEntities = [...appData.entities].sort((a, b) => totals[b.id] - totals[a.id]);
-            const maxTotal = Math.max(...Object.values(totals), 10); // Floor of 10 to prevent visually empty bars
-
+            const maxTotal = Math.max(...Object.values(totals), 10);
             const board = document.getElementById('leaderboard');
             board.innerHTML = '';
 
-            // Dynamic TV Mode Classes
             const tagPadding = isTvMode ? 'py-2 px-6 text-2xl' : 'py-1 px-3 text-sm';
             const valSize = isTvMode ? 'text-4xl' : 'text-sm';
             const barHeight = isTvMode ? 'h-16 mb-8' : 'h-6 mb-4';
@@ -466,38 +572,30 @@
             sortedEntities.forEach(ent => {
                 const amount = totals[ent.id];
                 const percentage = Math.min((amount / maxTotal) * 100, 100);
-                
-                // Optional Image logic
-                const imgHtml = ent.imageUrl 
-                    ? `<img src="${ent.imageUrl}" alt="${ent.namePublic}" class="w-8 h-8 rounded-full mr-2 inline-block object-cover border border-gray-300">` 
-                    : '';
+                const imgHtml = ent.imageUrl ? `<img src="${ent.imageUrl}" class="w-8 h-8 rounded-full mr-2 inline-block object-cover border border-gray-300">` : '';
 
                 board.innerHTML += `
                     <div class="relative pt-1">
                         <div class="flex mb-2 items-center justify-between">
                             <div class="flex items-center">
                                 ${isTvMode && ent.imageUrl ? `<img src="${ent.imageUrl}" class="w-12 h-12 rounded-full mr-4 inline-block object-cover border-2 border-gray-600">` : imgHtml}
-                                <span class="font-semibold inline-block uppercase rounded-full shadow-sm ${badgeBg} ${tagPadding}">
-                                    ${ent.namePublic}
-                                </span>
+                                <span class="font-semibold inline-block uppercase rounded-full shadow-sm ${badgeBg} ${tagPadding}">${ent.namePublic}</span>
                             </div>
                             <div class="text-right">
-                                <span class="font-bold inline-block ${valColor} ${valSize}">
-                                    $${amount.toFixed(2)}
-                                </span>
+                                <span class="font-bold inline-block ${valColor} ${valSize}">$${amount.toFixed(2)}</span>
                             </div>
                         </div>
                         <div class="overflow-hidden flex rounded-full ${trackBg} ${barHeight} shadow-inner">
                             <div style="width:${percentage}%" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center ${ent.color || 'bg-blue-500'} transition-all duration-1000 ease-out"></div>
                         </div>
-                    </div>
-                `;
+                    </div>`;
             });
+            
+            runCountdown();
         }
 
         function initApp() {
             checkViewMode();
-            
             accessToken = window.localStorage.getItem('dropbox_token');
             if (accessToken) {
                 document.getElementById('login-section').classList.replace('block', 'hidden');
@@ -515,9 +613,10 @@
                         refreshTimer = 60;
                     }
                 }, 1000);
-            } else {
-                handleAuthRedirect();
-            }
+                
+                if(!countdownInterval) countdownInterval = setInterval(runCountdown, 1000);
+                
+            } else { handleAuthRedirect(); }
         }
 
         window.onload = initApp;
