@@ -205,10 +205,10 @@
                             <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm mb-4">
                                 <p class="text-xs font-bold text-gray-500 uppercase mb-2">Create New Event</p>
                                 <input type="text" id="new-event-name" placeholder="Event Name" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-2 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
-                                <div class="flex gap-2 mb-2">
-                                    <div class="flex-1"><label class="text-xs text-gray-500">Goal ($)</label><input type="number" id="new-event-goal" placeholder="Opt" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner text-sm bg-white dark:bg-gray-700"></div>
-                                    <div class="flex-1"><label class="text-xs text-gray-500">Start (Opt)</label><input type="datetime-local" id="new-event-start" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner text-xs bg-white dark:bg-gray-700"></div>
-                                    <div class="flex-1"><label class="text-xs text-gray-500">End (Opt)</label><input type="datetime-local" id="new-event-end" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner text-xs bg-white dark:bg-gray-700"></div>
+                                <div class="flex flex-wrap gap-2 mb-2">
+                                    <div class="flex-1 min-w-[100px]"><label class="text-xs text-gray-500">Goal ($)</label><input type="number" id="new-event-goal" placeholder="Opt" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner text-sm bg-white dark:bg-gray-700"></div>
+                                    <div class="flex-1 min-w-[160px]"><label class="text-xs text-gray-500">Start (Opt)</label><input type="datetime-local" id="new-event-start" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner text-xs bg-white dark:bg-gray-700"></div>
+                                    <div class="flex-1 min-w-[160px]"><label class="text-xs text-gray-500">End (Opt)</label><input type="datetime-local" id="new-event-end" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner text-xs bg-white dark:bg-gray-700"></div>
                                 </div>
                                 <button onclick="addEvent()" class="w-full bg-blue-600 text-white font-semibold py-2 rounded text-sm hover:opacity-90">Add Event</button>
                             </div>
@@ -236,7 +236,7 @@
 
     <!-- Footer -->
     <footer id="main-footer" class="flex-shrink-0 text-center text-sm text-gray-500 py-4 mt-auto">
-        <p class="font-medium">Simple Live Tally <span class="font-bold">v1.10.0</span></p>
+        <p class="font-medium">Simple Live Tally <span class="font-bold">v1.11.0</span></p>
         <p class="mt-1 space-x-2">
             <a href="https://github.com/adambeltz2/Simple-Live-Tally" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">GitHub</a>
             <span>|</span>
@@ -334,7 +334,7 @@
                 container.classList.replace('max-w-5xl', 'max-w-full');
                 container.classList.replace('my-4', 'my-0');
                 container.classList.replace('rounded-lg', 'rounded-none');
-                container.classList.add('h-screen', 'p-4', 'sm:p-6'); // Tighter padding for TV
+                container.classList.add('h-screen', 'p-4', 'sm:p-6'); 
                 
                 header.classList.add('hidden');
                 nav.classList.add('hidden');
@@ -342,7 +342,7 @@
                 footer.classList.add('hidden'); 
                 leaderboardHeader.classList.replace('border-gray-200', 'border-gray-800');
                 
-                title.classList.replace('text-xl', 'text-4xl'); // Scaled down to free up vertical space
+                title.classList.replace('text-xl', 'text-4xl'); 
                 subtitle.classList.replace('text-gray-500', 'text-gray-400');
                 subtitle.classList.add('text-xl', 'mt-1');
                 
@@ -721,10 +721,10 @@
                     evList.innerHTML += `
                         <div class="bg-white dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm">
                             <input type="text" id="ev-name-${ev.id}" value="${ev.name}" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-3 font-semibold shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
-                            <div class="flex gap-2 mb-3">
-                                <div class="flex-1"><label class="text-xs text-gray-500">Goal ($)</label><input type="number" id="ev-goal-${ev.id}" value="${ev.goalAmount || ''}" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded text-xs shadow-inner bg-white dark:bg-gray-700"></div>
-                                <div class="flex-1"><label class="text-xs text-gray-500">Start</label><input type="datetime-local" id="ev-start-${ev.id}" value="${ev.startDate || ''}" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded text-xs shadow-inner bg-white dark:bg-gray-700"></div>
-                                <div class="flex-1"><label class="text-xs text-gray-500">End</label><input type="datetime-local" id="ev-end-${ev.id}" value="${ev.endDate || ''}" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded text-xs shadow-inner bg-white dark:bg-gray-700"></div>
+                            <div class="flex flex-wrap gap-2 mb-3">
+                                <div class="flex-1 min-w-[100px]"><label class="text-xs text-gray-500">Goal ($)</label><input type="number" id="ev-goal-${ev.id}" value="${ev.goalAmount || ''}" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded text-xs shadow-inner bg-white dark:bg-gray-700"></div>
+                                <div class="flex-1 min-w-[160px]"><label class="text-xs text-gray-500">Start</label><input type="datetime-local" id="ev-start-${ev.id}" value="${ev.startDate || ''}" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded text-xs shadow-inner bg-white dark:bg-gray-700"></div>
+                                <div class="flex-1 min-w-[160px]"><label class="text-xs text-gray-500">End</label><input type="datetime-local" id="ev-end-${ev.id}" value="${ev.endDate || ''}" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded text-xs shadow-inner bg-white dark:bg-gray-700"></div>
                             </div>
                             <div class="flex justify-between items-center mt-2 border-t dark:border-gray-700 pt-3">
                                 <button onclick="editEvent('${ev.id}')" class="text-xs bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 font-semibold py-1.5 px-4 rounded transition-colors">Save Changes</button>
@@ -889,7 +889,6 @@
                 const dashArray = 125.66; 
                 const dashOffset = dashArray - (dashArray * gaugePercentage / 100);
                 
-                // Reduced gauge sizes for TV mode to fit Top 10 list
                 const gaugeSize = isTvMode ? 'w-56 h-28' : 'w-48 h-24';
                 const textSize = isTvMode ? 'text-3xl' : 'text-xl';
                 const labelSize = isTvMode ? 'text-sm text-gray-400' : 'text-xs text-gray-500';
@@ -923,13 +922,11 @@
             const board = document.getElementById('leaderboard');
             board.innerHTML = '';
 
-            // Sizing parameters - Specifically scaled for 1080p fit in TV Mode
             const tagPadding = isTvMode ? 'py-0.5 px-4 text-lg' : 'py-1 px-3 text-sm';
             const barHeight = isTvMode ? 'h-8 mb-3' : 'h-8 mb-4';
             const badgeBg = isTvMode ? 'bg-gray-800 text-gray-200 border border-gray-700' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700';
             const trackBg = isTvMode ? 'bg-gray-800' : 'bg-gray-200 dark:bg-gray-800';
 
-            // Restrict TV mode strictly to top 10 to ensure it fits perfectly without scrollbars
             const displayEntities = isTvMode ? sortedEntities.slice(0, 10) : sortedEntities;
 
             displayEntities.forEach(ent => {
@@ -937,7 +934,6 @@
                 const percentage = Math.min((amount / maxTotal) * 100, 100);
                 const imgHtml = ent.imageUrl ? `<img src="${ent.imageUrl}" class="w-6 h-6 rounded-full mr-2 inline-block object-cover border border-gray-300 dark:border-gray-600">` : '';
 
-                // Decoupled absolute text overlay prevents dollar cutoff on small percentages
                 const amountInsideBar = amount > 0 
                     ? `<div class="absolute inset-y-0 left-0 flex items-center ${isTvMode ? 'pl-4' : 'pl-3'} pointer-events-none">
                            <span class="text-white font-bold ${isTvMode ? 'text-lg' : 'text-sm'} drop-shadow-md">$${amount.toFixed(2)}</span>
