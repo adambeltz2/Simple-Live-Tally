@@ -128,10 +128,10 @@
                         </div>
                     </div>
                     
-                    <div id="goal-gauge-container" class="flex-shrink-0 w-full flex justify-center mb-6 transition-all"></div>
+                    <div id="goal-gauge-container" class="flex-shrink-0 w-full flex justify-center mb-4 transition-all"></div>
 
                     <!-- Scrollable Inner Leaderboard -->
-                    <div id="leaderboard" class="space-y-4 flex-1 min-h-0 overflow-y-auto pr-2 pb-4">
+                    <div id="leaderboard" class="space-y-3 flex-1 min-h-0 overflow-y-auto pr-2 pb-4">
                         <!-- Progress bars injected here -->
                     </div>
                 </div>
@@ -236,7 +236,7 @@
 
     <!-- Footer -->
     <footer id="main-footer" class="flex-shrink-0 text-center text-sm text-gray-500 py-4 mt-auto">
-        <p class="font-medium">Simple Live Tally <span class="font-bold">v1.9.0</span></p>
+        <p class="font-medium">Simple Live Tally <span class="font-bold">v1.10.0</span></p>
         <p class="mt-1 space-x-2">
             <a href="https://github.com/adambeltz2/Simple-Live-Tally" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">GitHub</a>
             <span>|</span>
@@ -316,7 +316,6 @@
 
         function checkViewMode() {
             const isTvMode = window.location.hash === '#tv';
-            const body = document.getElementById('body');
             const container = document.getElementById('main-container');
             const header = document.getElementById('main-header');
             const nav = document.getElementById('app-nav');
@@ -335,16 +334,17 @@
                 container.classList.replace('max-w-5xl', 'max-w-full');
                 container.classList.replace('my-4', 'my-0');
                 container.classList.replace('rounded-lg', 'rounded-none');
+                container.classList.add('h-screen', 'p-4', 'sm:p-6'); // Tighter padding for TV
                 
                 header.classList.add('hidden');
                 nav.classList.add('hidden');
                 adminControls.classList.add('hidden');
-                footer.classList.add('hidden'); // Hide footer in TV mode
+                footer.classList.add('hidden'); 
                 leaderboardHeader.classList.replace('border-gray-200', 'border-gray-800');
                 
-                title.classList.replace('text-xl', 'text-5xl');
+                title.classList.replace('text-xl', 'text-4xl'); // Scaled down to free up vertical space
                 subtitle.classList.replace('text-gray-500', 'text-gray-400');
-                subtitle.classList.add('text-xl', 'mt-2');
+                subtitle.classList.add('text-xl', 'mt-1');
                 
                 countdownDisplay.classList.replace('text-sm', 'text-2xl');
                 
@@ -358,6 +358,7 @@
                 container.classList.replace('max-w-full', 'max-w-5xl');
                 container.classList.replace('my-0', 'my-4');
                 container.classList.replace('rounded-none', 'rounded-lg');
+                container.classList.remove('h-screen', 'p-4', 'sm:p-6');
                 
                 header.classList.remove('hidden');
                 nav.classList.remove('hidden');
@@ -365,9 +366,9 @@
                 footer.classList.remove('hidden');
                 leaderboardHeader.classList.replace('border-gray-800', 'border-gray-200');
                 
-                title.classList.replace('text-5xl', 'text-xl');
+                title.classList.replace('text-4xl', 'text-xl');
                 subtitle.classList.replace('text-gray-400', 'text-gray-500');
-                subtitle.classList.remove('text-xl', 'mt-2');
+                subtitle.classList.remove('text-xl', 'mt-1');
                 
                 countdownDisplay.classList.replace('text-2xl', 'text-sm');
                 tvLogo.classList.add('hidden');
@@ -637,7 +638,6 @@
             if (!entityId || isNaN(amount)) return;
             btn.disabled = true; btn.innerText = "Saving...";
 
-            // 1. OPTIMISTIC UPDATE: Apply locally and render immediately for 0ms latency
             const newTx = {
                 id: 'txn_' + Date.now(),
                 createDate: new Date().toISOString(),
@@ -648,12 +648,9 @@
             };
             
             appData.transactions.push(newTx);
-            renderApp(); // UI updates instantly
+            renderApp();
 
-            // 2. BACKGROUND SYNC: Safely push to Dropbox
             updateDataWrapper(() => {
-                // When updateDataWrapper fetches the latest state from Dropbox to prevent conflicts, 
-                // it overwrites our local optimistic state. So we must re-apply the new transaction here.
                 appData.transactions.push(newTx);
             }).then(() => {
                 msg.textContent = "Transaction saved.";
@@ -823,7 +820,7 @@
                 document.getElementById('ticker-wrapper').classList.add('hidden');
                 return;
             } else {
-                if(submitBtn && !submitBtn.disabled) { // Respect processing state
+                if(submitBtn && !submitBtn.disabled) { 
                     submitBtn.innerText = "Submit Vote";
                     submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
                     amtInput.disabled = false;
@@ -848,7 +845,7 @@
             appData.entities.forEach(ent => {
                 const opt = document.createElement('option');
                 opt.value = ent.id; opt.text = ent.namePublic;
-                if (ent.id === currentSelectedEntityId) { opt.selected = true; } // Preserve selection across renders
+                if (ent.id === currentSelectedEntityId) { opt.selected = true; } 
                 entitySelect.appendChild(opt);
             });
 
@@ -866,7 +863,7 @@
             const topNCount = 5; 
             const topLeaders = sortedEntities.slice(0, topNCount);
             
-            if (topLeaders.length > 0 && !isTvMode) {
+            if (topLeaders.length > 0) {
                 let tickerHtml = '';
                 for(let i=0; i<2; i++) {
                     topLeaders.forEach((ent, idx) => {
@@ -892,9 +889,10 @@
                 const dashArray = 125.66; 
                 const dashOffset = dashArray - (dashArray * gaugePercentage / 100);
                 
-                const gaugeSize = isTvMode ? 'w-80 h-40' : 'w-48 h-24';
-                const textSize = isTvMode ? 'text-4xl' : 'text-xl';
-                const labelSize = isTvMode ? 'text-lg text-gray-400' : 'text-xs text-gray-500';
+                // Reduced gauge sizes for TV mode to fit Top 10 list
+                const gaugeSize = isTvMode ? 'w-56 h-28' : 'w-48 h-24';
+                const textSize = isTvMode ? 'text-3xl' : 'text-xl';
+                const labelSize = isTvMode ? 'text-sm text-gray-400' : 'text-xs text-gray-500';
                 
                 const valColor = (isTvMode || document.documentElement.classList.contains('dark')) ? 'text-white' : 'text-gray-900';
                 const bgStroke = (isTvMode || document.documentElement.classList.contains('dark')) ? '#374151' : '#e5e7eb';
@@ -921,36 +919,42 @@
                 gaugeContainer.classList.add('hidden');
             }
 
-            // --- Render Leaderboard Bars with Totals Inside ---
+            // --- Render Leaderboard Bars ---
             const board = document.getElementById('leaderboard');
             board.innerHTML = '';
 
-            const tagPadding = isTvMode ? 'py-2 px-6 text-2xl' : 'py-1 px-3 text-sm';
-            const barHeight = isTvMode ? 'h-16 mb-8' : 'h-8 mb-4';
+            // Sizing parameters - Specifically scaled for 1080p fit in TV Mode
+            const tagPadding = isTvMode ? 'py-0.5 px-4 text-lg' : 'py-1 px-3 text-sm';
+            const barHeight = isTvMode ? 'h-8 mb-3' : 'h-8 mb-4';
             const badgeBg = isTvMode ? 'bg-gray-800 text-gray-200 border border-gray-700' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700';
             const trackBg = isTvMode ? 'bg-gray-800' : 'bg-gray-200 dark:bg-gray-800';
 
-            sortedEntities.forEach(ent => {
+            // Restrict TV mode strictly to top 10 to ensure it fits perfectly without scrollbars
+            const displayEntities = isTvMode ? sortedEntities.slice(0, 10) : sortedEntities;
+
+            displayEntities.forEach(ent => {
                 const amount = totals[ent.id];
                 const percentage = Math.min((amount / maxTotal) * 100, 100);
-                const imgHtml = ent.imageUrl ? `<img src="${ent.imageUrl}" class="w-8 h-8 rounded-full mr-2 inline-block object-cover border border-gray-300 dark:border-gray-600">` : '';
+                const imgHtml = ent.imageUrl ? `<img src="${ent.imageUrl}" class="w-6 h-6 rounded-full mr-2 inline-block object-cover border border-gray-300 dark:border-gray-600">` : '';
 
+                // Decoupled absolute text overlay prevents dollar cutoff on small percentages
                 const amountInsideBar = amount > 0 
-                    ? `<span class="text-white font-bold ${isTvMode ? 'text-2xl pl-6' : 'text-sm pl-4'} truncate">$${amount.toFixed(2)}</span>` 
+                    ? `<div class="absolute inset-y-0 left-0 flex items-center ${isTvMode ? 'pl-4' : 'pl-3'} pointer-events-none">
+                           <span class="text-white font-bold ${isTvMode ? 'text-lg' : 'text-sm'} drop-shadow-md">$${amount.toFixed(2)}</span>
+                       </div>` 
                     : '';
 
                 board.innerHTML += `
                     <div class="relative pt-1">
-                        <div class="flex mb-2 items-center justify-between">
+                        <div class="flex mb-1 items-center justify-between">
                             <div class="flex items-center">
-                                ${isTvMode && ent.imageUrl ? `<img src="${ent.imageUrl}" class="w-12 h-12 rounded-full mr-4 inline-block object-cover border-2 border-gray-600">` : imgHtml}
+                                ${isTvMode && ent.imageUrl ? `<img src="${ent.imageUrl}" class="w-8 h-8 rounded-full mr-3 inline-block object-cover border-2 border-gray-600">` : imgHtml}
                                 <span class="font-semibold inline-block uppercase rounded-full shadow-sm ${badgeBg} ${tagPadding}">${ent.namePublic}</span>
                             </div>
                         </div>
-                        <div class="overflow-hidden flex rounded-full ${trackBg} ${barHeight} shadow-inner">
-                            <div style="width:${percentage}%" class="shadow-none flex flex-col whitespace-nowrap justify-center ${ent.color || 'bg-blue-500'} transition-all duration-1000 ease-out">
-                                ${amountInsideBar}
-                            </div>
+                        <div class="relative overflow-hidden flex rounded-full ${trackBg} ${barHeight} shadow-inner">
+                            <div style="width:${percentage}%" class="h-full ${ent.color || 'bg-blue-500'} transition-all duration-1000 ease-out"></div>
+                            ${amountInsideBar}
                         </div>
                     </div>`;
             });
