@@ -26,19 +26,25 @@
         .animate-marquee:hover {
             animation-play-state: paused;
         }
+        /* Custom Scrollbar for inner lists */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .dark ::-webkit-scrollbar-thumb { background: #475569; }
     </style>
 </head>
-<body id="body" class="bg-gray-100 dark:bg-gray-950 text-gray-800 dark:text-gray-100 font-sans transition-colors duration-300 min-h-screen flex flex-col">
+<body id="body" class="bg-gray-100 dark:bg-gray-950 text-gray-800 dark:text-gray-100 font-sans transition-colors duration-300 h-screen overflow-hidden flex flex-col">
 
-    <div id="main-container" class="max-w-5xl mx-auto my-6 flex-grow w-full bg-white dark:bg-gray-900 rounded-lg shadow-lg overflow-hidden transition-all duration-300 flex flex-col">
+    <!-- Viewport bounded container -->
+    <div id="main-container" class="max-w-5xl mx-auto my-4 flex-1 min-h-0 w-full bg-white dark:bg-gray-900 rounded-lg shadow-lg overflow-hidden transition-all duration-300 flex flex-col">
         
         <!-- Header -->
-        <div id="main-header" class="bg-blue-600 p-4 text-white flex justify-between items-center transition-colors duration-500">
+        <div id="main-header" class="flex-shrink-0 bg-blue-600 p-4 text-white flex justify-between items-center transition-colors duration-500">
             <div class="flex items-center gap-3">
                 <img id="header-logo" src="" alt="Logo" class="h-8 rounded hidden object-cover bg-white p-0.5">
-                <h1 id="header-title" class="text-2xl font-bold">Simple Live Tally</h1>
+                <h1 id="header-title" class="text-2xl font-bold truncate">Simple Live Tally</h1>
             </div>
-            <div class="flex items-center gap-4">
+            <div class="flex items-center gap-4 flex-shrink-0">
                 <button onclick="toggleDarkMode()" class="p-1.5 rounded bg-black/20 hover:bg-black/40 transition-colors text-white" title="Toggle Dark Mode">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
                 </button>
@@ -50,8 +56,8 @@
             </div>
         </div>
 
-        <!-- Scrolling Top Leaders Ticker in Header Area -->
-        <div id="ticker-wrapper" class="bg-gray-900 text-white overflow-hidden py-2 border-b border-gray-800 hidden">
+        <!-- Scrolling Top Leaders Ticker -->
+        <div id="ticker-wrapper" class="flex-shrink-0 bg-gray-900 text-white overflow-hidden py-2 border-b border-gray-800 hidden">
             <div id="ticker-content" class="animate-marquee flex items-center gap-8 whitespace-nowrap text-sm font-semibold">
                 <!-- Dynamically populated -->
             </div>
@@ -66,10 +72,10 @@
         </div>
 
         <!-- App Section -->
-        <div id="app-section" class="hidden flex-col h-full flex-grow">
+        <div id="app-section" class="hidden flex-col flex-1 min-h-0">
             
             <!-- Navigation Tabs -->
-            <div id="app-nav" class="bg-gray-100 dark:bg-gray-950 border-b dark:border-gray-800 flex p-2 gap-2">
+            <div id="app-nav" class="flex-shrink-0 bg-gray-100 dark:bg-gray-950 border-b dark:border-gray-800 flex p-2 gap-2">
                 <button onclick="switchTab('dashboard')" id="tab-dashboard" class="px-4 py-2 rounded font-semibold text-sm transition-colors shadow-sm">
                     Live Dashboard
                 </button>
@@ -79,10 +85,10 @@
             </div>
 
             <!-- VIEW: DASHBOARD -->
-            <div id="view-dashboard" class="p-6 flex flex-col flex-grow">
+            <div id="view-dashboard" class="p-6 flex flex-col flex-1 min-h-0">
                 
                 <!-- Transaction Entry -->
-                <div id="admin-controls" class="mb-8 p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
+                <div id="admin-controls" class="flex-shrink-0 mb-6 p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-xl font-semibold">Add Transaction</h2>
                         <div class="flex items-center gap-2">
@@ -107,8 +113,8 @@
                 </div>
 
                 <!-- Leaderboard & Gauge -->
-                <div class="flex flex-col flex-grow">
-                    <div class="flex justify-between items-end mb-6 border-b border-gray-200 dark:border-gray-800 pb-2" id="leaderboard-header">
+                <div class="flex flex-col flex-1 min-h-0">
+                    <div class="flex-shrink-0 flex justify-between items-end mb-4 border-b border-gray-200 dark:border-gray-800 pb-2" id="leaderboard-header">
                         <div class="flex items-center gap-4">
                             <img id="tv-logo" src="" alt="Logo" class="h-16 rounded hidden object-cover bg-white p-1 border-2 border-gray-200 dark:border-gray-700">
                             <div>
@@ -122,16 +128,17 @@
                         </div>
                     </div>
                     
-                    <div id="goal-gauge-container" class="w-full flex justify-center mb-6 transition-all"></div>
+                    <div id="goal-gauge-container" class="flex-shrink-0 w-full flex justify-center mb-6 transition-all"></div>
 
-                    <div id="leaderboard" class="space-y-4 flex-1">
+                    <!-- Scrollable Inner Leaderboard -->
+                    <div id="leaderboard" class="space-y-4 flex-1 min-h-0 overflow-y-auto pr-2 pb-4">
                         <!-- Progress bars injected here -->
                     </div>
                 </div>
             </div>
 
             <!-- VIEW: MANAGEMENT -->
-            <div id="view-management" class="p-6 hidden flex-col flex-grow overflow-y-auto">
+            <div id="view-management" class="p-6 hidden flex-col flex-1 min-h-0 overflow-y-auto">
                 
                 <div class="flex justify-between items-center mb-6">
                     <h2 class="text-2xl font-bold">Data Management</h2>
@@ -141,13 +148,9 @@
                     </button>
                 </div>
                 
-                <!-- 2-Column Grid -->
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    
                     <!-- COLUMN 1: Settings & Entities -->
                     <div class="space-y-8">
-                        
-                        <!-- Global Settings & Reset -->
                         <div>
                             <div class="flex justify-between items-center mb-4 border-b dark:border-gray-700 pb-2">
                                 <h3 class="text-lg font-semibold">Global Settings & Reset</h3>
@@ -175,7 +178,6 @@
                             </div>
                         </div>
 
-                        <!-- Entities List -->
                         <div>
                             <div class="flex justify-between items-center mb-4 border-b dark:border-gray-700 pb-2">
                                 <h3 class="text-lg font-semibold">Entities (Teams/Items)</h3>
@@ -195,8 +197,6 @@
 
                     <!-- COLUMN 2: Events & Transactions -->
                     <div class="space-y-8">
-                        
-                        <!-- Events List -->
                         <div>
                             <div class="flex justify-between items-center mb-4 border-b dark:border-gray-700 pb-2">
                                 <h3 class="text-lg font-semibold">Events</h3>
@@ -216,7 +216,6 @@
                             <div id="events-list" class="space-y-4"></div>
                         </div>
 
-                        <!-- Active Transactions -->
                         <div>
                             <div class="flex justify-between items-center mb-4 border-b dark:border-gray-700 pb-2">
                                 <h3 class="text-lg font-semibold">Transactions (Active Event)</h3>
@@ -236,9 +235,9 @@
     </div>
 
     <!-- Footer -->
-    <footer id="main-footer" class="text-center text-sm text-gray-500 py-6 mt-auto">
-        <p class="font-medium">Simple Live Tally <span class="font-bold">v1.8.0</span></p>
-        <p class="mt-2 space-x-2">
+    <footer id="main-footer" class="flex-shrink-0 text-center text-sm text-gray-500 py-4 mt-auto">
+        <p class="font-medium">Simple Live Tally <span class="font-bold">v1.9.0</span></p>
+        <p class="mt-1 space-x-2">
             <a href="https://github.com/adambeltz2/Simple-Live-Tally" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">GitHub</a>
             <span>|</span>
             <a href="https://www.buymeacoffee.com/adambeltz" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">Buy Me a Coffee</a>
@@ -327,20 +326,20 @@
             const leaderboardHeader = document.getElementById('leaderboard-header');
             const countdownDisplay = document.getElementById('event-countdown');
             const tvLogo = document.getElementById('tv-logo');
+            const footer = document.getElementById('main-footer');
             
             if (isTvMode) {
                 switchTab('dashboard');
                 document.documentElement.classList.add('dark'); 
                 
                 container.classList.replace('max-w-5xl', 'max-w-full');
-                container.classList.replace('my-6', 'my-0');
-                container.classList.replace('shadow-lg', 'shadow-none');
-                container.classList.add('h-screen', 'p-8', 'rounded-none');
-                container.classList.replace('bg-white', 'bg-transparent'); 
+                container.classList.replace('my-4', 'my-0');
+                container.classList.replace('rounded-lg', 'rounded-none');
                 
                 header.classList.add('hidden');
                 nav.classList.add('hidden');
                 adminControls.classList.add('hidden');
+                footer.classList.add('hidden'); // Hide footer in TV mode
                 leaderboardHeader.classList.replace('border-gray-200', 'border-gray-800');
                 
                 title.classList.replace('text-xl', 'text-5xl');
@@ -357,14 +356,13 @@
                 initTheme();
                 
                 container.classList.replace('max-w-full', 'max-w-5xl');
-                container.classList.replace('my-0', 'my-6');
-                container.classList.replace('shadow-none', 'shadow-lg');
-                container.classList.remove('h-screen', 'p-8', 'rounded-none');
-                container.classList.replace('bg-transparent', 'bg-white');
+                container.classList.replace('my-0', 'my-4');
+                container.classList.replace('rounded-none', 'rounded-lg');
                 
                 header.classList.remove('hidden');
                 nav.classList.remove('hidden');
                 adminControls.classList.remove('hidden');
+                footer.classList.remove('hidden');
                 leaderboardHeader.classList.replace('border-gray-800', 'border-gray-200');
                 
                 title.classList.replace('text-5xl', 'text-xl');
@@ -578,10 +576,14 @@
 
         // Entities
         function addEntity() {
-            const namePublic = document.getElementById('new-ent-public').value;
+            const namePublic = document.getElementById('new-ent-public').value.trim();
             const namePrivate = document.getElementById('new-ent-private').value;
             const imageUrl = document.getElementById('new-ent-img').value;
             if (!namePublic) return alert("Public Name required.");
+
+            const exists = appData.entities.some(e => e.namePublic.trim().toLowerCase() === namePublic.toLowerCase());
+            if (exists) return alert("An entity with this public name already exists. Please choose a unique name.");
+
             updateDataWrapper(() => {
                 appData.entities.push({ 
                     id: 'ent_' + Date.now(), namePublic, namePrivate, imageUrl, color: colors[Math.floor(Math.random() * colors.length)] 
@@ -593,10 +595,16 @@
         }
 
         function editEntity(id) {
-            const newPub = document.getElementById(`ent-pub-${id}`).value;
+            const newPub = document.getElementById(`ent-pub-${id}`).value.trim();
             const newPriv = document.getElementById(`ent-priv-${id}`).value;
             const newImg = document.getElementById(`ent-img-${id}`).value;
             const newCol = document.getElementById(`ent-col-${id}`).value;
+            
+            if (!newPub) return alert("Public Name required.");
+
+            const exists = appData.entities.some(e => e.id !== id && e.namePublic.trim().toLowerCase() === newPub.toLowerCase());
+            if (exists) return alert("Another entity with this public name already exists.");
+
             updateDataWrapper(() => {
                 const ent = appData.entities.find(e => e.id === id);
                 if(ent) { ent.namePublic = newPub; ent.namePrivate = newPriv; ent.imageUrl = newImg; ent.color = newCol; }
@@ -612,7 +620,7 @@
             }
         }
 
-        // Transactions Core
+        // --- OPTIMISTIC UI TRANSACTION LOGIC ---
         async function changeActiveEvent() {
             const select = document.getElementById('active-event-select');
             if(!select) return;
@@ -629,15 +637,24 @@
             if (!entityId || isNaN(amount)) return;
             btn.disabled = true; btn.innerText = "Saving...";
 
+            // 1. OPTIMISTIC UPDATE: Apply locally and render immediately for 0ms latency
+            const newTx = {
+                id: 'txn_' + Date.now(),
+                createDate: new Date().toISOString(),
+                modifiedDate: new Date().toISOString(),
+                entityId: entityId,
+                eventId: appData.activeEventId,
+                amount: amount
+            };
+            
+            appData.transactions.push(newTx);
+            renderApp(); // UI updates instantly
+
+            // 2. BACKGROUND SYNC: Safely push to Dropbox
             updateDataWrapper(() => {
-                appData.transactions.push({
-                    id: 'txn_' + Date.now(),
-                    createDate: new Date().toISOString(),
-                    modifiedDate: new Date().toISOString(),
-                    entityId: entityId,
-                    eventId: appData.activeEventId,
-                    amount: amount
-                });
+                // When updateDataWrapper fetches the latest state from Dropbox to prevent conflicts, 
+                // it overwrites our local optimistic state. So we must re-apply the new transaction here.
+                appData.transactions.push(newTx);
             }).then(() => {
                 msg.textContent = "Transaction saved.";
                 msg.className = "text-sm mt-2 text-green-600 block";
@@ -648,7 +665,6 @@
             });
         }
 
-        // Transaction Modifications
         function editTransactionAmount(id) {
             const newAmt = parseFloat(document.getElementById(`tx-amt-${id}`).value);
             if (isNaN(newAmt)) return;
@@ -807,8 +823,7 @@
                 document.getElementById('ticker-wrapper').classList.add('hidden');
                 return;
             } else {
-                if(submitBtn) {
-                    submitBtn.disabled = false;
+                if(submitBtn && !submitBtn.disabled) { // Respect processing state
                     submitBtn.innerText = "Submit Vote";
                     submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
                     amtInput.disabled = false;
@@ -816,6 +831,7 @@
             }
 
             const eventSelect = document.getElementById('active-event-select');
+            const currentSelectedEventId = eventSelect.value;
             eventSelect.innerHTML = '';
             let activeEvent = null;
             appData.events.forEach(evt => {
@@ -827,10 +843,12 @@
             document.getElementById('leaderboard-subtitle').innerText = `Active Event: ${activeEvent ? activeEvent.name : 'Unknown'}`;
 
             const entitySelect = document.getElementById('entity-select');
+            const currentSelectedEntityId = entitySelect.value;
             entitySelect.innerHTML = '';
             appData.entities.forEach(ent => {
                 const opt = document.createElement('option');
                 opt.value = ent.id; opt.text = ent.namePublic;
+                if (ent.id === currentSelectedEntityId) { opt.selected = true; } // Preserve selection across renders
                 entitySelect.appendChild(opt);
             });
 
@@ -845,12 +863,11 @@
             // --- Render Scrolling Top Ticker (Top 5 Leaders) ---
             const tickerWrapper = document.getElementById('ticker-wrapper');
             const tickerContent = document.getElementById('ticker-content');
-            const topNCount = 5; // Configurable limit for top leaders
+            const topNCount = 5; 
             const topLeaders = sortedEntities.slice(0, topNCount);
             
-            if (topLeaders.length > 0) {
+            if (topLeaders.length > 0 && !isTvMode) {
                 let tickerHtml = '';
-                // Duplicate once to allow smooth seamless CSS looping
                 for(let i=0; i<2; i++) {
                     topLeaders.forEach((ent, idx) => {
                         const rank = idx + 1;
