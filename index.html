@@ -4,14 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Simple Live Tally</title>
-    <script>
-        window.tailwind = window.tailwind || {};
-        window.tailwind.config = {
-            darkMode: 'class',
-            theme: { extend: {} }
-        };
-    </script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Precompiled from css/input.css via `npm run build:css` (tailwind.config.js).
+         Regenerate after adding any new Tailwind utility class to index.html. -->
+    <link rel="stylesheet" href="css/tailwind.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         @keyframes marquee {
@@ -236,7 +231,7 @@
 
     <!-- Footer -->
     <footer id="main-footer" class="flex-shrink-0 text-center text-sm text-gray-500 py-4 mt-auto">
-        <p class="font-medium">Simple Live Tally <span class="font-bold">v1.11.0</span></p>
+        <p class="font-medium">Simple Live Tally <span class="font-bold">v1.12.0</span></p>
         <p class="mt-1 space-x-2">
             <a href="https://github.com/adambeltz2/Simple-Live-Tally" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">GitHub</a>
             <span>|</span>
@@ -246,6 +241,7 @@
         </p>
     </footer>
 
+    <script src="js/logic.js"></script>
     <script>
         // --- CONFIGURATION ---
         const CLIENT_ID = 'p6ejl1ht6k9gni2'; 
@@ -398,14 +394,17 @@
             const codeVerifier = generateRandomString(64);
             window.localStorage.setItem('pkce_verifier', codeVerifier);
             const codeChallenge = await generateCodeChallenge(codeVerifier);
-            window.location.href = `https://www.dropbox.com/oauth2/authorize?client_id=${CLIENT_ID}&response_type=code&code_challenge=${codeChallenge}&code_challenge_method=S256&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+            // token_access_type=offline requests a refresh_token alongside the
+            // short-lived access token, so the app can renew silently instead
+            // of forcing operators to re-authenticate mid-event.
+            window.location.href = `https://www.dropbox.com/oauth2/authorize?client_id=${CLIENT_ID}&response_type=code&code_challenge=${codeChallenge}&code_challenge_method=S256&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&token_access_type=offline`;
         }
         async function handleAuthRedirect() {
             const params = new URLSearchParams(window.location.search);
             const code = params.get('code');
             if (code) {
                 const newUrl = window.location.pathname + window.location.hash;
-                window.history.replaceState({}, document.title, newUrl); 
+                window.history.replaceState({}, document.title, newUrl);
                 const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -417,42 +416,92 @@
                 const data = await response.json();
                 if (data.access_token) {
                     window.localStorage.setItem('dropbox_token', data.access_token);
+                    if (data.refresh_token) window.localStorage.setItem('dropbox_refresh_token', data.refresh_token);
                     initApp();
                 }
             }
         }
 
+        // Exchanges the stored refresh_token for a new access_token. Returns
+        // true on success (accessToken and localStorage are updated in
+        // place) so callers can transparently retry the request that hit a
+        // 401, instead of every expiry forcing a full re-login.
+        async function refreshAccessToken() {
+            const refreshToken = window.localStorage.getItem('dropbox_refresh_token');
+            if (!refreshToken) return false;
+            try {
+                const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        client_id: CLIENT_ID, grant_type: 'refresh_token', refresh_token: refreshToken
+                    })
+                });
+                if (!response.ok) return false;
+                const data = await response.json();
+                if (!data.access_token) return false;
+                accessToken = data.access_token;
+                window.localStorage.setItem('dropbox_token', accessToken);
+                return true;
+            } catch (error) {
+                console.error("Error refreshing Dropbox token:", error);
+                return false;
+            }
+        }
+
+        // Runs a Dropbox API request; on a 401 it attempts one silent token
+        // refresh and retries once before giving up. buildOptions is a
+        // function (not a plain object) so the retry picks up the refreshed
+        // accessToken rather than replaying the stale Authorization header.
+        async function dropboxFetch(url, buildOptions) {
+            let response = await fetch(url, buildOptions());
+            if (response.status === 401) {
+                const refreshed = await refreshAccessToken();
+                if (refreshed) response = await fetch(url, buildOptions());
+            }
+            return response;
+        }
+
         function handleAuthFailure() {
             window.localStorage.removeItem('dropbox_token');
+            window.localStorage.removeItem('dropbox_refresh_token');
             accessToken = null;
             if(countdownInterval) clearInterval(countdownInterval);
             alert("Your Dropbox session has expired or the token is invalid. Please sign in again.");
             window.location.reload();
         }
 
+        // Does the actual Dropbox fetch and throws on any failure (including
+        // a 401, after triggering the re-auth flow). Callers that must not
+        // proceed on stale/missing data (e.g. updateDataWrapper) should call
+        // this directly inside their own try/catch instead of fetchState(),
+        // which swallows errors for the background polling use case.
+        async function fetchStateInternal() {
+            const response = await dropboxFetch('https://content.dropboxapi.com/2/files/download', () => ({
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${accessToken}`, 'Dropbox-API-Arg': JSON.stringify({ path: FILE_PATH }) }
+            }));
+
+            if (response.status === 401) { handleAuthFailure(); throw new Error('Unauthorized'); }
+            if (response.status === 409) {
+                appData = defaultData;
+                if(!appData.activeEventId) appData.activeEventId = appData.events[0].id;
+                await saveState();
+                return;
+            }
+            if (!response.ok) throw new Error('Failed to fetch from Dropbox');
+
+            currentRev = JSON.parse(response.headers.get('Dropbox-API-Result')).rev;
+            appData = await response.json();
+
+            if(!appData.events) appData.events = defaultData.events;
+            if(!appData.settings) appData.settings = defaultData.settings;
+            if(!appData.activeEventId && appData.events.length > 0) appData.activeEventId = appData.events[0].id;
+        }
+
         async function fetchState() {
             try {
-                const response = await fetch('https://content.dropboxapi.com/2/files/download', {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${accessToken}`, 'Dropbox-API-Arg': JSON.stringify({ path: FILE_PATH }) }
-                });
-                
-                if (response.status === 401) { return handleAuthFailure(); }
-                if (response.status === 409) { 
-                    appData = defaultData;
-                    if(!appData.activeEventId) appData.activeEventId = appData.events[0].id;
-                    await saveState();
-                    return;
-                }
-                if (!response.ok) throw new Error('Failed to fetch from Dropbox');
-                
-                currentRev = JSON.parse(response.headers.get('Dropbox-API-Result')).rev;
-                appData = await response.json();
-                
-                if(!appData.events) appData.events = defaultData.events;
-                if(!appData.settings) appData.settings = defaultData.settings;
-                if(!appData.activeEventId && appData.events.length > 0) appData.activeEventId = appData.events[0].id;
-                
+                await fetchStateInternal();
                 applyThemeColor();
                 renderApp();
                 if(!document.getElementById('view-management').classList.contains('hidden')) renderManagement();
@@ -461,14 +510,14 @@
 
         async function saveState() {
             const mode = currentRev ? { ".tag": "update", "update": currentRev } : "add";
-            const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
+            const response = await dropboxFetch('https://content.dropboxapi.com/2/files/upload', () => ({
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/octet-stream',
                     'Dropbox-API-Arg': JSON.stringify({ path: FILE_PATH, mode: mode, autorename: false, mute: true })
                 },
                 body: JSON.stringify(appData)
-            });
+            }));
             if (response.status === 401) { handleAuthFailure(); return false; }
             if (response.status === 409) { return false; } 
             
@@ -495,14 +544,26 @@
             URL.revokeObjectURL(url);
         }
 
+        const MAX_SAVE_ATTEMPTS = 5;
+
         async function updateDataWrapper(updateFn) {
-            await fetchState();
-            updateFn();
-            const success = await saveState();
-            if(!success) { alert("Data conflict. Retrying..."); await updateDataWrapper(updateFn); return; }
-            applyThemeColor();
-            renderApp();
-            renderManagement();
+            const result = await runUpdateWithRetry({
+                fetchState: fetchStateInternal,
+                updateFn,
+                saveState,
+                maxAttempts: MAX_SAVE_ATTEMPTS
+            });
+
+            if (result.status === 'success') {
+                applyThemeColor();
+                renderApp();
+                renderManagement();
+            } else if (result.status === 'fetch-failed') {
+                console.error("Error refreshing state during update:", result.error);
+                alert("Couldn't reach Dropbox to sync the latest data. Your change was not saved — please check your connection and try again.");
+            } else if (result.status === 'conflict-exhausted') {
+                alert("Couldn't save your change after several attempts due to a data conflict. Please try again.");
+            }
         }
 
         // Settings & Factory Reset
@@ -582,7 +643,7 @@
             const imageUrl = document.getElementById('new-ent-img').value;
             if (!namePublic) return alert("Public Name required.");
 
-            const exists = appData.entities.some(e => e.namePublic.trim().toLowerCase() === namePublic.toLowerCase());
+            const exists = isDuplicateName(appData.entities, namePublic);
             if (exists) return alert("An entity with this public name already exists. Please choose a unique name.");
 
             updateDataWrapper(() => {
@@ -603,7 +664,7 @@
             
             if (!newPub) return alert("Public Name required.");
 
-            const exists = appData.entities.some(e => e.id !== id && e.namePublic.trim().toLowerCase() === newPub.toLowerCase());
+            const exists = isDuplicateName(appData.entities, newPub, id);
             if (exists) return alert("Another entity with this public name already exists.");
 
             updateDataWrapper(() => {
@@ -720,7 +781,7 @@
                 appData.events.forEach(ev => {
                     evList.innerHTML += `
                         <div class="bg-white dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm">
-                            <input type="text" id="ev-name-${ev.id}" value="${ev.name}" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-3 font-semibold shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+                            <input type="text" id="ev-name-${ev.id}" value="${escapeHtml(ev.name)}" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-3 font-semibold shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
                             <div class="flex flex-wrap gap-2 mb-3">
                                 <div class="flex-1 min-w-[100px]"><label class="text-xs text-gray-500">Goal ($)</label><input type="number" id="ev-goal-${ev.id}" value="${ev.goalAmount || ''}" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded text-xs shadow-inner bg-white dark:bg-gray-700"></div>
                                 <div class="flex-1 min-w-[160px]"><label class="text-xs text-gray-500">Start</label><input type="datetime-local" id="ev-start-${ev.id}" value="${ev.startDate || ''}" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded text-xs shadow-inner bg-white dark:bg-gray-700"></div>
@@ -744,11 +805,11 @@
                     entList.innerHTML += `
                         <div class="bg-white dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col gap-3">
                             <div class="flex gap-2">
-                                <input type="text" id="ent-pub-${ent.id}" value="${ent.namePublic}" class="flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-sm font-semibold shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Public Name">
-                                <input type="text" id="ent-priv-${ent.id}" value="${ent.namePrivate || ''}" class="flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-sm shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Private Name">
+                                <input type="text" id="ent-pub-${ent.id}" value="${escapeHtml(ent.namePublic)}" class="flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-sm font-semibold shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Public Name">
+                                <input type="text" id="ent-priv-${ent.id}" value="${escapeHtml(ent.namePrivate)}" class="flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-sm shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Private Name">
                             </div>
                             <div class="flex gap-2">
-                                <input type="url" id="ent-img-${ent.id}" value="${ent.imageUrl || ''}" class="flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-sm shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Image URL">
+                                <input type="url" id="ent-img-${ent.id}" value="${escapeHtml(ent.imageUrl)}" class="flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-sm shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Image URL">
                                 <select id="ent-col-${ent.id}" class="p-2 border border-gray-400 dark:border-gray-600 rounded text-sm ${ent.color} text-white font-semibold shadow-inner outline-none">${colorOptions}</select>
                             </div>
                             <div class="flex justify-between items-center mt-1 border-t dark:border-gray-700 pt-3">
@@ -776,7 +837,7 @@
                         txList.innerHTML += `
                             <div class="flex items-center justify-between p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors border-b dark:border-gray-700 last:border-0">
                                 <div class="flex flex-col">
-                                    <span class="text-sm font-semibold">${entName}</span>
+                                    <span class="text-sm font-semibold">${escapeHtml(entName)}</span>
                                     <span class="text-xs text-gray-500">${dt}</span>
                                 </div>
                                 <div class="flex items-center gap-2">
@@ -849,12 +910,8 @@
                 entitySelect.appendChild(opt);
             });
 
-            const totals = {};
-            appData.entities.forEach(e => totals[e.id] = 0);
-            const activeTransactions = appData.transactions.filter(t => t.eventId === appData.activeEventId);
-            activeTransactions.forEach(t => { if(totals[t.entityId] !== undefined) totals[t.entityId] += t.amount; });
-
-            const sortedEntities = [...appData.entities].sort((a, b) => totals[b.id] - totals[a.id]);
+            const totals = computeTotals(appData.entities, appData.transactions, appData.activeEventId);
+            const sortedEntities = sortEntitiesByTotal(appData.entities, totals);
             const maxTotal = Math.max(...Object.values(totals), 10);
             
             // --- Render Scrolling Top Ticker (Top 5 Leaders) ---
@@ -870,7 +927,7 @@
                         const rank = idx + 1;
                         const amt = totals[ent.id];
                         const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
-                        tickerHtml += `<div class="flex items-center gap-2 px-4"><span class="text-yellow-400 font-bold">${medal}</span> <span>${ent.namePublic}:</span> <span class="text-green-400 font-bold">$${amt.toFixed(2)}</span></div>`;
+                        tickerHtml += `<div class="flex items-center gap-2 px-4"><span class="text-yellow-400 font-bold">${medal}</span> <span>${escapeHtml(ent.namePublic)}:</span> <span class="text-green-400 font-bold">$${amt.toFixed(2)}</span></div>`;
                     });
                 }
                 tickerContent.innerHTML = tickerHtml;
@@ -885,10 +942,9 @@
             
             if (activeEvent && activeEvent.goalAmount && activeEvent.goalAmount > 0) {
                 const goalAmount = parseFloat(activeEvent.goalAmount);
-                const gaugePercentage = Math.min((totalRaised / goalAmount) * 100, 100);
-                const dashArray = 125.66; 
-                const dashOffset = dashArray - (dashArray * gaugePercentage / 100);
-                
+                const dashArray = 125.66;
+                const { percentage: gaugePercentage, dashOffset } = computeGaugeGeometry(totalRaised, goalAmount, dashArray);
+
                 const gaugeSize = isTvMode ? 'w-56 h-28' : 'w-48 h-24';
                 const textSize = isTvMode ? 'text-3xl' : 'text-xl';
                 const labelSize = isTvMode ? 'text-sm text-gray-400' : 'text-xs text-gray-500';
@@ -931,8 +987,8 @@
 
             displayEntities.forEach(ent => {
                 const amount = totals[ent.id];
-                const percentage = Math.min((amount / maxTotal) * 100, 100);
-                const imgHtml = ent.imageUrl ? `<img src="${ent.imageUrl}" class="w-6 h-6 rounded-full mr-2 inline-block object-cover border border-gray-300 dark:border-gray-600">` : '';
+                const percentage = computeBarPercentage(amount, maxTotal);
+                const imgHtml = ent.imageUrl ? `<img src="${escapeHtml(ent.imageUrl)}" class="w-6 h-6 rounded-full mr-2 inline-block object-cover border border-gray-300 dark:border-gray-600">` : '';
 
                 const amountInsideBar = amount > 0 
                     ? `<div class="absolute inset-y-0 left-0 flex items-center ${isTvMode ? 'pl-4' : 'pl-3'} pointer-events-none">
@@ -944,8 +1000,8 @@
                     <div class="relative pt-1">
                         <div class="flex mb-1 items-center justify-between">
                             <div class="flex items-center">
-                                ${isTvMode && ent.imageUrl ? `<img src="${ent.imageUrl}" class="w-8 h-8 rounded-full mr-3 inline-block object-cover border-2 border-gray-600">` : imgHtml}
-                                <span class="font-semibold inline-block uppercase rounded-full shadow-sm ${badgeBg} ${tagPadding}">${ent.namePublic}</span>
+                                ${isTvMode && ent.imageUrl ? `<img src="${escapeHtml(ent.imageUrl)}" class="w-8 h-8 rounded-full mr-3 inline-block object-cover border-2 border-gray-600">` : imgHtml}
+                                <span class="font-semibold inline-block uppercase rounded-full shadow-sm ${badgeBg} ${tagPadding}">${escapeHtml(ent.namePublic)}</span>
                             </div>
                         </div>
                         <div class="relative overflow-hidden flex rounded-full ${trackBg} ${barHeight} shadow-inner">
