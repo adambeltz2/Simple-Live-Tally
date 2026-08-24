@@ -4,6 +4,14 @@
 
 ---
 
+## How It Works & Scope
+
+Simple Live Tally is a **single-operator, manual-entry tool**, not an open public voting system. One person (or a small team, all authenticated with the same Dropbox account) runs the "Add Transaction" panel and types in each donation or vote as it comes in; the "Live Dashboard" / TV mode is what the audience watches update in near real time. There's no public-facing submission form — anyone who can add a transaction already has full write access to the event's data.
+
+Everything for an event — settings, teams, transactions — lives in a single `data.json` file in your Dropbox App Folder. That's plenty for a typical single-event fundraiser or vote count, but it's not built for very high transaction volume or many people editing concurrently: every save re-fetches and re-applies on top of the latest file, so heavy concurrent writes mean more retries, not corruption, but it will feel that friction well before a real database would.
+
+---
+
 ## Features
 
 * **Serverless & Zero Maintenance:** Hosted for free on GitHub Pages with no backend server or database infrastructure required.

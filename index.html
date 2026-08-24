@@ -253,7 +253,7 @@
 
     <!-- Footer -->
     <footer id="main-footer" class="flex-shrink-0 text-center text-sm text-gray-500 py-4 mt-auto">
-        <p class="font-medium">Simple Live Tally <span class="font-bold">v1.13.0</span></p>
+        <p class="font-medium">Simple Live Tally <span class="font-bold">v1.14.0</span></p>
         <p class="mt-1 space-x-2">
             <a href="https://github.com/adambeltz2/Simple-Live-Tally" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">GitHub</a>
             <span>|</span>
@@ -563,8 +563,8 @@
                 },
                 body: JSON.stringify(appData)
             }));
-            if (response.status === 401) { handleAuthFailure(); return false; }
-            if (response.status === 409) { return false; } 
+            if (response.status === 401) { handleAuthFailure(); throw new Error('Unauthorized'); }
+            if (response.status === 409) { return false; }
             
             currentRev = (await response.json()).rev;
             return true;
@@ -608,6 +608,10 @@
                 alert("Couldn't reach Dropbox to sync the latest data. Your change was not saved — please check your connection and try again.");
             } else if (result.status === 'conflict-exhausted') {
                 alert("Couldn't save your change after several attempts due to a data conflict. Please try again.");
+            } else if (result.status === 'save-failed') {
+                // handleAuthFailure() (called from saveState()) already alerted
+                // and is reloading the page — nothing else to do here.
+                console.error("Error saving:", result.error);
             }
 
             return result;
@@ -618,6 +622,9 @@
             const t = document.getElementById('set-title').value;
             const l = document.getElementById('set-logo').value;
             const c = document.getElementById('set-color').value;
+
+            if (!isAllowedMediaUrl(l)) return alert("Logo URL must be a valid http:// or https:// link.");
+
             updateDataWrapper(() => {
                 appData.settings.title = t;
                 appData.settings.logoUrl = l;
@@ -745,6 +752,8 @@
             const exists = isDuplicateName(appData.entities, namePublic);
             if (exists) return alert("An entity with this public name already exists. Please choose a unique name.");
 
+            if (!isAllowedMediaUrl(imageUrl)) return alert("Image URL must be a valid http:// or https:// link.");
+
             updateDataWrapper(() => {
                 appData.entities.push({ 
                     id: 'ent_' + Date.now(), namePublic, namePrivate, imageUrl, color: colors[Math.floor(Math.random() * colors.length)] 
@@ -765,6 +774,8 @@
 
             const exists = isDuplicateName(appData.entities, newPub, id);
             if (exists) return alert("Another entity with this public name already exists.");
+
+            if (!isAllowedMediaUrl(newImg)) return alert("Image URL must be a valid http:// or https:// link.");
 
             updateDataWrapper(() => {
                 const ent = appData.entities.find(e => e.id === id);
@@ -795,7 +806,11 @@
             const entityId = document.getElementById('entity-select').value;
             const amount = parseFloat(document.getElementById('amount-input').value);
 
-            if (!entityId || isNaN(amount)) return;
+            if (!entityId || !isValidTransactionAmount(amount)) {
+                msg.textContent = "Select a team and enter a positive amount.";
+                msg.className = "text-sm mt-2 text-red-600 block";
+                return;
+            }
             isSubmittingTransaction = true;
             btn.disabled = true; btn.innerText = "Saving...";
 
@@ -833,7 +848,7 @@
 
         function editTransactionAmount(id) {
             const newAmt = parseFloat(document.getElementById(`tx-amt-${id}`).value);
-            if (isNaN(newAmt)) return;
+            if (!isValidTransactionAmount(newAmt)) return alert("Enter a positive amount.");
             updateDataWrapper(() => {
                 const tx = appData.transactions.find(t => t.id === id);
                 if (tx) {

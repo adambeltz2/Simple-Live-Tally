@@ -7,6 +7,8 @@ const {
     computeBarPercentage,
     computeGaugeGeometry,
     isDuplicateName,
+    isValidTransactionAmount,
+    isAllowedMediaUrl,
     computeRetryDelay,
     runUpdateWithRetry,
     computeMaxVisibleRows,
@@ -156,6 +158,53 @@ test('isDuplicateName', async (t) => {
     });
 });
 
+test('isValidTransactionAmount', async (t) => {
+    await t.test('accepts a positive finite number', () => {
+        assert.equal(isValidTransactionAmount(0.01), true);
+        assert.equal(isValidTransactionAmount(50), true);
+    });
+
+    await t.test('rejects zero and negative amounts', () => {
+        assert.equal(isValidTransactionAmount(0), false);
+        assert.equal(isValidTransactionAmount(-5), false);
+    });
+
+    await t.test('rejects NaN and non-finite values', () => {
+        assert.equal(isValidTransactionAmount(NaN), false);
+        assert.equal(isValidTransactionAmount(Infinity), false);
+        assert.equal(isValidTransactionAmount(-Infinity), false);
+    });
+
+    await t.test('rejects non-number types', () => {
+        assert.equal(isValidTransactionAmount('50'), false);
+        assert.equal(isValidTransactionAmount(null), false);
+        assert.equal(isValidTransactionAmount(undefined), false);
+    });
+});
+
+test('isAllowedMediaUrl', async (t) => {
+    await t.test('treats an empty/absent URL as allowed (optional field)', () => {
+        assert.equal(isAllowedMediaUrl(''), true);
+        assert.equal(isAllowedMediaUrl(undefined), true);
+        assert.equal(isAllowedMediaUrl(null), true);
+    });
+
+    await t.test('accepts http and https URLs', () => {
+        assert.equal(isAllowedMediaUrl('https://example.com/logo.png'), true);
+        assert.equal(isAllowedMediaUrl('http://example.com/logo.png'), true);
+    });
+
+    await t.test('rejects javascript: and data: schemes', () => {
+        assert.equal(isAllowedMediaUrl('javascript:alert(1)'), false);
+        assert.equal(isAllowedMediaUrl('data:text/html,<script>alert(1)</script>'), false);
+    });
+
+    await t.test('rejects malformed and relative input', () => {
+        assert.equal(isAllowedMediaUrl('not a url'), false);
+        assert.equal(isAllowedMediaUrl('/relative/path.png'), false);
+    });
+});
+
 test('computeRetryDelay', async (t) => {
     await t.test('grows exponentially with attempt number', () => {
         assert.equal(computeRetryDelay(1, 250, 4000), 250);
@@ -245,6 +294,23 @@ test('runUpdateWithRetry', async (t) => {
         });
         assert.equal(result.status, 'conflict-exhausted');
         assert.equal(saveAttempts, 3);
+    });
+
+    await t.test('a thrown saveState (e.g. 401) is reported as save-failed, not retried as a conflict', async () => {
+        let saveAttempts = 0;
+        let delayCalls = 0;
+        const authError = new Error('Unauthorized');
+        const result = await runUpdateWithRetry({
+            fetchState: async () => {},
+            updateFn: () => {},
+            saveState: async () => { saveAttempts++; throw authError; },
+            delay: async () => { delayCalls++; },
+            maxAttempts: 5
+        });
+        assert.equal(result.status, 'save-failed');
+        assert.equal(result.error, authError);
+        assert.equal(saveAttempts, 1, 'must not retry after a save failure that is not a conflict');
+        assert.equal(delayCalls, 0, 'must not wait on a backoff delay for a non-retryable failure');
     });
 });
 
