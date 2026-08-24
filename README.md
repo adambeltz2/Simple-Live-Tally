@@ -69,3 +69,14 @@ npm run build:css
 ```
 
 and commit the updated `css/tailwind.css`. Classes not present in the compiled stylesheet simply won't be styled — there's no runtime compiler anymore.
+
+---
+
+## Project Status & Roadmap
+
+This project tracks its own history and open work in two files, kept in sync with every change:
+
+* **[`CHANGELOG.md`](./CHANGELOG.md)** — what's shipped, release by release (Keep a Changelog format).
+* **[`BACKLOG.md`](./BACKLOG.md)** — known follow-ups and enhancements not yet built, grouped by area (security, reliability, code quality, product/docs).
+
+The pattern for any fix or enhancement: log it in `CHANGELOG.md` when it ships, and if it started life as a backlog item, remove it from `BACKLOG.md` in the same change. This keeps both files an accurate record instead of stale wishlists.

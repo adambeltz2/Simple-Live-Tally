@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Production Tailwind build:** Replaced the `cdn.tailwindcss.com` runtime compiler (dev-only, per Tailwind's own docs) with a precompiled, minified `css/tailwind.css` generated via the Tailwind CLI. No GitHub Pages configuration changes required to deploy.
 - **Extracted testable logic:** Totals, sorting, gauge geometry, duplicate-name checks, and the fetch/save/retry cycle now live in `js/logic.js`, covered by a `node --test` suite (`npm test`) with no new runtime dependencies.
+### Added
+- **`BACKLOG.md`:** Tracks known follow-ups and enhancements not yet built (validation gaps, CSP, further structural split, etc.), grouped by area. README now points to it and to this changelog as the project's ongoing record of fixes and enhancements.
 
 ## [1.11.0] - 2026-08-07
 ### Fixed
