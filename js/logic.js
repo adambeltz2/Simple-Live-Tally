@@ -65,6 +65,28 @@
         });
     }
 
+    // A transaction amount must be a finite positive number. Corrections to
+    // a mis-entered amount go through editTransactionAmount() (or deletion)
+    // instead of allowing a negative/zero entry here.
+    function isValidTransactionAmount(amount) {
+        return typeof amount === 'number' && Number.isFinite(amount) && amount > 0;
+    }
+
+    // Restricts entity/logo image URLs to http(s) links. Empty/absent is
+    // allowed since these fields are optional; anything that isn't a
+    // parseable absolute http(s) URL (javascript:, data:, relative paths,
+    // malformed input) is rejected.
+    function isAllowedMediaUrl(value) {
+        if (!value) return true;
+        let url;
+        try {
+            url = new URL(value);
+        } catch {
+            return false;
+        }
+        return url.protocol === 'http:' || url.protocol === 'https:';
+    }
+
     // Exponential backoff delay (ms) for retrying a save after a 409
     // conflict, capped so retries don't grow unbounded.
     function computeRetryDelay(attempt, baseMs, maxMs) {
@@ -78,17 +100,22 @@
     // delay) so it has no DOM or network dependency of its own and can be
     // unit tested directly.
     //
-    // Two bugs this specifically guards against:
+    // Three failure modes this specifically guards against:
     //  - If fetchState() fails/throws, updateFn() must NOT run against
     //    stale local state, or a transaction already recorded locally gets
     //    appended a second time on top of itself once the caller later
     //    succeeds. So a fetch failure aborts immediately.
     //  - A 409 conflict must not retry forever; it retries up to
     //    maxAttempts times with backoff, then gives up cleanly.
+    //  - If saveState() throws (e.g. a 401 that's already triggering a
+    //    re-auth/reload elsewhere), that isn't a retryable conflict — it
+    //    must not burn a retry attempt/delay waiting on something that was
+    //    never going to succeed.
     //
     // Returns one of:
     //   { status: 'success' }
     //   { status: 'fetch-failed', error }
+    //   { status: 'save-failed', error }
     //   { status: 'conflict-exhausted' }
     async function runUpdateWithRetry({ fetchState, updateFn, saveState, delay, maxAttempts, retryDelay }) {
         const attempts = maxAttempts || 5;
@@ -103,7 +130,12 @@
         updateFn();
 
         for (let attempt = 1; attempt <= attempts; attempt++) {
-            const success = await saveState();
+            let success;
+            try {
+                success = await saveState();
+            } catch (error) {
+                return { status: 'save-failed', error };
+            }
             if (success) return { status: 'success' };
             if (attempt === attempts) return { status: 'conflict-exhausted' };
 
@@ -170,6 +202,8 @@
         computeBarPercentage,
         computeGaugeGeometry,
         isDuplicateName,
+        isValidTransactionAmount,
+        isAllowedMediaUrl,
         computeRetryDelay,
         runUpdateWithRetry,
         computeMaxVisibleRows,

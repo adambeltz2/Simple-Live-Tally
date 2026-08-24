@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - 2026-08-24
+### Security
+- **Constrained `imageUrl`/`logoUrl` to http(s) schemes:** Entity and logo image URLs were only HTML-escaped, with no scheme restriction. `isAllowedMediaUrl()` (`js/logic.js`) now rejects `javascript:`, `data:`, and other non-http(s) values in `addEntity`, `editEntity`, and `saveSettings`, before they're ever saved.
+### Fixed
+- **Unvalidated transaction amounts:** `submitTransaction()`/`editTransactionAmount()` only checked `isNaN`, silently accepting zero, negative, or absurd amounts. `isValidTransactionAmount()` now requires a finite positive number; corrections still go through the existing edit/delete tools.
+- **401 mid-retry wasted a conflict-retry attempt:** `saveState()`'s 401 branch triggered `handleAuthFailure()` (which reloads the page) but returned `false`, so `runUpdateWithRetry` treated it as a retryable 409 conflict — burning an attempt and a backoff delay on something that was never going to succeed. `saveState()` now throws on 401, surfaced as a distinct `'save-failed'` status that `updateDataWrapper` doesn't retry.
+### Added
+- **README:** New "How It Works & Scope" section — explicit that this is a single-operator, manual-entry tool (not open public self-service voting), and that the single-`data.json` design isn't intended for high transaction volume or many concurrent operators.
+
 ## [1.13.0] - 2026-08-24
 ### Fixed
 - **Submit button permanently stuck on "Setup Required":** `renderApp()`'s re-enable check was gated on `submitBtn.disabled` itself, which the button's own "Setup Required" state had already set to `true` — so once an event/team list went from empty to populated, the button could never recover. Re-enabling is now tracked via a dedicated `isSubmittingTransaction` flag instead of overloading the disabled state, which also still correctly protects the "Saving..." state during an in-flight submission.

@@ -9,18 +9,10 @@ from this list — this file is only what's still outstanding.
 
 ## Security
 
-- [ ] **Validate transaction amounts.** `submitTransaction()` /
-      `editTransactionAmount()` only check `isNaN`, so negative, zero, or
-      absurd values are accepted silently. Decide whether negative amounts
-      are an intentional feature (refunds/corrections) — if so, label them
-      as such in the UI; if not, reject them.
 - [ ] **Add a Content-Security-Policy.** Blocked today by the inline
       `onclick="..."` handlers used throughout `index.html` — a strict CSP
       can't allow inline event handlers. Requires moving those to
       `addEventListener` first (see structural split below).
-- [ ] **Constrain `imageUrl`/`logoUrl` schemes.** They're HTML-escaped
-      (1.12.0) so attribute-breakout XSS is closed, but there's no scheme
-      allowlist (e.g. restrict to `http(s)://`) for defense in depth.
 
 ## Code quality / maintainability
 
@@ -39,34 +31,19 @@ from this list — this file is only what's still outstanding.
 
 ## Reliability
 
-- [ ] **Tidy the 401-vs-retry interaction.** `saveState()`'s 401 branch
-      calls `handleAuthFailure()` (which reloads the page) but still
-      returns `false`, so a 401 mid-retry burns a retry attempt before the
-      reload takes over. Harmless today, but worth cleaning up if the
-      retry loop (`runUpdateWithRetry` in `js/logic.js`) grows more logic.
 - [ ] **Offline/queued writes.** A failed save currently surfaces an alert
       and drops the change — an operator has to redo the entry. Worth a
       small local queue that retries once connectivity returns, given the
       target environment (venue wifi) is exactly where this happens.
 - [ ] **Bulk JSON editor bypasses per-record validation.** Saving through
       the "Raw JSON" tab only checks the top-level shape (`validateAppDataShape`
-      in `js/logic.js`) — it doesn't re-run entity name uniqueness or any
-      future URL scheme allowlist the individual forms enforce. Also, since
-      it replaces the entire file, a concurrent edit made by someone else
-      between opening the editor and hitting Save is silently overwritten
-      (no merge) — acceptable for a power-user bulk-edit tool, but worth
-      calling out in the UI if it becomes a recurring pain point.
-
-## Product / docs
-
-- [ ] **Clarify the operating model in the README.** The feature list's
-      "voting" language can read as open public self-service; the app is
-      actually single-operator manual entry (an admin types in amounts).
-      Worth a short paragraph making that explicit.
-- [ ] **Document the BYOS scaling ceiling.** Everything lives in one
-      `data.json` file in the operator's Dropbox App Folder — fine for a
-      typical single-event fundraiser, not intended for very high
-      transaction volume or many concurrent operators editing at once.
+      in `js/logic.js`) — it doesn't re-run entity name uniqueness, the
+      `isAllowedMediaUrl` scheme allowlist, or the transaction amount check
+      that the individual forms enforce. Also, since it replaces the entire
+      file, a concurrent edit made by someone else between opening the
+      editor and hitting Save is silently overwritten (no merge) —
+      acceptable for a power-user bulk-edit tool, but worth calling out in
+      the UI if it becomes a recurring pain point.
 
 ## Process
 

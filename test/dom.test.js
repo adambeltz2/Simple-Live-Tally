@@ -269,3 +269,51 @@ test('DOM: bulk JSON editor', async (t) => {
         assert.equal(window.document.getElementById('json-editor-message').textContent, 'Saved.');
     });
 });
+
+test('DOM: input validation', async (t) => {
+    await t.test('submitTransaction rejects a non-positive amount without attempting to save', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }]
+        });
+        window.fetch = async () => { throw new Error('fetch should not be called for an invalid submission'); };
+        window.renderApp();
+
+        window.document.getElementById('entity-select').value = 'e1';
+        window.document.getElementById('amount-input').value = '-5';
+        window.submitTransaction();
+
+        const msg = window.document.getElementById('entry-message');
+        assert.match(msg.textContent, /positive amount/);
+        assert.equal(window.appData.transactions.length, 0, 'no transaction should be recorded locally');
+    });
+
+    await t.test('addEntity rejects a non-http(s) image URL and never attempts to save', () => {
+        const window = loadApp();
+        window.appData = baseAppData();
+        window.fetch = async () => { throw new Error('fetch should not be called for an invalid entity'); };
+        window.alert = () => {};
+        window.switchTab('management');
+        window.switchMgmtTab('entities');
+
+        window.document.getElementById('new-ent-public').value = 'Team X';
+        window.document.getElementById('new-ent-img').value = 'javascript:alert(1)';
+        window.addEntity();
+
+        assert.equal(window.appData.entities.length, 0, 'no entity should be added');
+    });
+
+    await t.test('saveSettings rejects a non-http(s) logo URL and never attempts to save', () => {
+        const window = loadApp();
+        window.appData = baseAppData();
+        window.fetch = async () => { throw new Error('fetch should not be called for invalid settings'); };
+        window.alert = () => {};
+        window.switchTab('management');
+        window.switchMgmtTab('settings');
+
+        window.document.getElementById('set-logo').value = 'data:text/html,<script>alert(1)</script>';
+        window.saveSettings();
+
+        assert.equal(window.appData.settings.logoUrl, '', 'settings must be untouched on rejection');
+    });
+});
