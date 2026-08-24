@@ -118,6 +118,51 @@
         return { status: 'conflict-exhausted' };
     }
 
+    // How many rows fit in availableHeight without scrolling, given the
+    // measured height of one row and the gap between rows. Falls back to
+    // showing everything if rowHeight can't be measured (e.g. rendered
+    // off-screen or in an environment with no real layout engine) rather
+    // than hiding entries no one asked to hide.
+    function computeMaxVisibleRows(availableHeight, rowHeight, rowGap) {
+        const gap = rowGap || 0;
+        if (!rowHeight || rowHeight <= 0) return Infinity;
+        return Math.max(1, Math.floor((availableHeight + gap) / (rowHeight + gap)));
+    }
+
+    // Shape-checks a parsed appData object (used by the bulk JSON editor).
+    // Only checks the top-level contract the rest of the app relies on
+    // (array vs. object fields) — not deep per-record validation.
+    function validateAppDataShape(parsed) {
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+            return { valid: false, error: 'Root value must be a JSON object.' };
+        }
+        const arrayFields = ['events', 'entities', 'transactions'];
+        for (const field of arrayFields) {
+            if (!Array.isArray(parsed[field])) {
+                return { valid: false, error: `"${field}" must be an array.` };
+            }
+        }
+        if (typeof parsed.settings !== 'object' || parsed.settings === null || Array.isArray(parsed.settings)) {
+            return { valid: false, error: '"settings" must be an object.' };
+        }
+        return { valid: true };
+    }
+
+    // Parses and validates the bulk JSON editor's text in one step: a
+    // JSON.parse() syntax error and a shape-validation failure both come
+    // back through the same { valid, error } / { valid, data } shape.
+    function parseAppDataJson(text) {
+        let parsed;
+        try {
+            parsed = JSON.parse(text);
+        } catch (error) {
+            return { valid: false, error: `Invalid JSON: ${error.message}` };
+        }
+        const shapeResult = validateAppDataShape(parsed);
+        if (!shapeResult.valid) return shapeResult;
+        return { valid: true, data: parsed };
+    }
+
     const api = {
         escapeHtml,
         computeTotals,
@@ -126,7 +171,10 @@
         computeGaugeGeometry,
         isDuplicateName,
         computeRetryDelay,
-        runUpdateWithRetry
+        runUpdateWithRetry,
+        computeMaxVisibleRows,
+        validateAppDataShape,
+        parseAppDataJson
     };
 
     if (typeof module !== 'undefined' && module.exports) {
