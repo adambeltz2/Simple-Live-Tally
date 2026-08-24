@@ -8,7 +8,10 @@ const {
     computeGaugeGeometry,
     isDuplicateName,
     computeRetryDelay,
-    runUpdateWithRetry
+    runUpdateWithRetry,
+    computeMaxVisibleRows,
+    validateAppDataShape,
+    parseAppDataJson
 } = require('../js/logic.js');
 
 test('escapeHtml', async (t) => {
@@ -242,5 +245,85 @@ test('runUpdateWithRetry', async (t) => {
         });
         assert.equal(result.status, 'conflict-exhausted');
         assert.equal(saveAttempts, 3);
+    });
+});
+
+test('computeMaxVisibleRows', async (t) => {
+    await t.test('computes how many whole rows fit including inter-row gaps', () => {
+        // 5 rows of 80px + 12px gaps fit exactly in 5*80 + 4*12 = 448px
+        assert.equal(computeMaxVisibleRows(448, 80, 12), 5);
+    });
+
+    await t.test('floors to the last row that fully fits, never a partial row', () => {
+        assert.equal(computeMaxVisibleRows(447, 80, 12), 4);
+    });
+
+    await t.test('always shows at least 1 row even if nothing fits', () => {
+        assert.equal(computeMaxVisibleRows(10, 80, 12), 1);
+    });
+
+    await t.test('falls back to unlimited (Infinity) when row height cannot be measured', () => {
+        assert.equal(computeMaxVisibleRows(500, 0, 12), Infinity);
+        assert.equal(computeMaxVisibleRows(500, -5, 12), Infinity);
+    });
+
+    await t.test('treats a missing gap as 0', () => {
+        assert.equal(computeMaxVisibleRows(400, 100), 4);
+    });
+});
+
+test('validateAppDataShape', async (t) => {
+    const validData = { settings: {}, events: [], entities: [], transactions: [] };
+
+    await t.test('accepts a well-formed appData object', () => {
+        assert.deepEqual(validateAppDataShape(validData), { valid: true });
+    });
+
+    await t.test('rejects a non-object root (array, string, null, number)', () => {
+        assert.equal(validateAppDataShape([]).valid, false);
+        assert.equal(validateAppDataShape('nope').valid, false);
+        assert.equal(validateAppDataShape(null).valid, false);
+        assert.equal(validateAppDataShape(42).valid, false);
+    });
+
+    await t.test('rejects when an array field is missing or the wrong type', () => {
+        for (const field of ['events', 'entities', 'transactions']) {
+            const broken = { ...validData, [field]: 'not-an-array' };
+            const result = validateAppDataShape(broken);
+            assert.equal(result.valid, false);
+            assert.match(result.error, new RegExp(field));
+        }
+    });
+
+    await t.test('rejects a non-object settings field', () => {
+        const broken = { ...validData, settings: [] };
+        assert.equal(validateAppDataShape(broken).valid, false);
+    });
+});
+
+test('parseAppDataJson', async (t) => {
+    await t.test('parses and accepts valid, well-formed JSON', () => {
+        const json = JSON.stringify({ settings: { title: 'X' }, events: [], entities: [], transactions: [] });
+        const result = parseAppDataJson(json);
+        assert.equal(result.valid, true);
+        assert.equal(result.data.settings.title, 'X');
+    });
+
+    await t.test('reports a syntax error for malformed JSON without throwing', () => {
+        const result = parseAppDataJson('{ this is not valid json');
+        assert.equal(result.valid, false);
+        assert.match(result.error, /Invalid JSON/);
+    });
+
+    await t.test('reports a shape error for syntactically valid but wrong-shaped JSON', () => {
+        const result = parseAppDataJson('[1, 2, 3]');
+        assert.equal(result.valid, false);
+        assert.match(result.error, /object/);
+    });
+
+    await t.test('reports a shape error for JSON missing a required array field', () => {
+        const result = parseAppDataJson(JSON.stringify({ settings: {}, entities: [], transactions: [] }));
+        assert.equal(result.valid, false);
+        assert.match(result.error, /events/);
     });
 });

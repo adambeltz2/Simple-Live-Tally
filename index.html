@@ -26,6 +26,12 @@
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .dark ::-webkit-scrollbar-thumb { background: #475569; }
+        /* Data Management sub-navigation */
+        .mgmt-tab-btn { color: #6b7280; border-color: transparent; }
+        .mgmt-tab-btn:hover { color: #374151; }
+        .dark .mgmt-tab-btn:hover { color: #d1d5db; }
+        .mgmt-tab-btn.active { color: #2563eb; border-color: #2563eb; }
+        .dark .mgmt-tab-btn.active { color: #60a5fa; border-color: #60a5fa; }
     </style>
 </head>
 <body id="body" class="bg-gray-100 dark:bg-gray-950 text-gray-800 dark:text-gray-100 font-sans transition-colors duration-300 h-screen overflow-hidden flex flex-col">
@@ -125,104 +131,120 @@
                     
                     <div id="goal-gauge-container" class="flex-shrink-0 w-full flex justify-center mb-4 transition-all"></div>
 
-                    <!-- Scrollable Inner Leaderboard -->
-                    <div id="leaderboard" class="space-y-3 flex-1 min-h-0 overflow-y-auto pr-2 pb-4">
+                    <!-- Leaderboard: sized to fit without scrolling; entries beyond
+                         what fits are summarized by #leaderboard-overflow below. -->
+                    <div id="leaderboard" class="space-y-3 flex-1 min-h-0 overflow-hidden pb-1">
                         <!-- Progress bars injected here -->
                     </div>
+                    <div id="leaderboard-overflow" class="flex-shrink-0 text-center text-xs text-gray-400 dark:text-gray-500 italic pt-2 hidden"></div>
                 </div>
             </div>
 
             <!-- VIEW: MANAGEMENT -->
-            <div id="view-management" class="p-6 hidden flex-col flex-1 min-h-0 overflow-y-auto">
-                
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-2xl font-bold">Data Management</h2>
-                    <button onclick="exportDataZip()" class="bg-gray-800 dark:bg-gray-700 hover:opacity-90 text-white font-semibold py-2 px-4 rounded shadow-sm text-sm inline-flex items-center">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                        Export Data (ZIP)
-                    </button>
+            <div id="view-management" class="hidden flex-col flex-1 min-h-0">
+
+                <div class="flex-shrink-0 px-6 pt-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-2xl font-bold">Data Management</h2>
+                        <button onclick="exportDataZip()" class="bg-gray-800 dark:bg-gray-700 hover:opacity-90 text-white font-semibold py-2 px-4 rounded shadow-sm text-sm inline-flex items-center">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            Export Data (ZIP)
+                        </button>
+                    </div>
+
+                    <!-- Sub-navigation: each pane below fills the remaining height on
+                         its own, so switching between Settings/Teams/Events/Transactions
+                         never means scrolling past unrelated sections to get there. -->
+                    <div class="flex gap-1 border-b border-gray-200 dark:border-gray-700">
+                        <button onclick="switchMgmtTab('settings')" id="mgmt-tab-settings" class="mgmt-tab-btn px-4 py-2 -mb-px text-sm font-semibold border-b-2 transition-colors">Settings</button>
+                        <button onclick="switchMgmtTab('entities')" id="mgmt-tab-entities" class="mgmt-tab-btn px-4 py-2 -mb-px text-sm font-semibold border-b-2 transition-colors">Teams</button>
+                        <button onclick="switchMgmtTab('events')" id="mgmt-tab-events" class="mgmt-tab-btn px-4 py-2 -mb-px text-sm font-semibold border-b-2 transition-colors">Events</button>
+                        <button onclick="switchMgmtTab('transactions')" id="mgmt-tab-transactions" class="mgmt-tab-btn px-4 py-2 -mb-px text-sm font-semibold border-b-2 transition-colors">Transactions</button>
+                        <button onclick="switchMgmtTab('json')" id="mgmt-tab-json" class="mgmt-tab-btn px-4 py-2 -mb-px text-sm font-semibold border-b-2 transition-colors">Raw JSON</button>
+                    </div>
                 </div>
-                
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <!-- COLUMN 1: Settings & Entities -->
-                    <div class="space-y-8">
-                        <div>
-                            <div class="flex justify-between items-center mb-4 border-b dark:border-gray-700 pb-2">
-                                <h3 class="text-lg font-semibold">Global Settings & Reset</h3>
-                            </div>
-                            <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm">
-                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Dashboard Title</label>
-                                <input type="text" id="set-title" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-3 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
-                                
-                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Logo URL (Optional)</label>
-                                <input type="url" id="set-logo" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-3 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
-                                
-                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Theme Color</label>
-                                <select id="set-color" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-4 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
-                                    <option value="bg-blue-600">Blue</option>
-                                    <option value="bg-red-600">Red</option>
-                                    <option value="bg-green-600">Green</option>
-                                    <option value="bg-purple-600">Purple</option>
-                                    <option value="bg-gray-900">Dark Gray</option>
-                                </select>
 
-                                <div class="flex gap-4">
-                                    <button onclick="saveSettings()" class="flex-1 bg-gray-800 dark:bg-gray-600 text-white font-semibold py-2 rounded text-sm hover:opacity-90 transition-opacity">Apply Settings</button>
-                                    <button onclick="factoryReset()" class="flex-1 bg-red-600 text-white font-semibold py-2 rounded text-sm hover:bg-red-700 transition-opacity" title="Purge everything and start completely clean">Factory Reset</button>
-                                </div>
-                            </div>
-                        </div>
+                <div class="flex-1 min-h-0 overflow-y-auto p-6">
 
-                        <div>
-                            <div class="flex justify-between items-center mb-4 border-b dark:border-gray-700 pb-2">
-                                <h3 class="text-lg font-semibold">Entities (Teams/Items)</h3>
-                            </div>
+                    <!-- PANE: Settings -->
+                    <div id="mgmt-view-settings" class="mgmt-pane hidden max-w-xl">
+                        <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm">
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Dashboard Title</label>
+                            <input type="text" id="set-title" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-3 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
 
-                            <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm mb-4">
-                                <p class="text-xs font-bold text-gray-500 uppercase mb-2">Register New Entity</p>
-                                <input type="text" id="new-ent-public" placeholder="Public Name" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-2 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
-                                <input type="text" id="new-ent-private" placeholder="Private Name (Optional)" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-2 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
-                                <input type="url" id="new-ent-img" placeholder="Image URL (Optional)" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-2 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
-                                <button onclick="addEntity()" class="w-full bg-blue-600 text-white font-semibold py-2 rounded text-sm hover:opacity-90">Add Entity</button>
-                            </div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Logo URL (Optional)</label>
+                            <input type="url" id="set-logo" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-3 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
 
-                            <div id="entities-list" class="space-y-4"></div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Theme Color</label>
+                            <select id="set-color" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-4 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="bg-blue-600">Blue</option>
+                                <option value="bg-red-600">Red</option>
+                                <option value="bg-green-600">Green</option>
+                                <option value="bg-purple-600">Purple</option>
+                                <option value="bg-gray-900">Dark Gray</option>
+                            </select>
+
+                            <div class="flex gap-4">
+                                <button onclick="saveSettings()" class="flex-1 bg-gray-800 dark:bg-gray-600 text-white font-semibold py-2 rounded text-sm hover:opacity-90 transition-opacity">Apply Settings</button>
+                                <button onclick="factoryReset()" class="flex-1 bg-red-600 text-white font-semibold py-2 rounded text-sm hover:bg-red-700 transition-opacity" title="Purge everything and start completely clean">Factory Reset</button>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- COLUMN 2: Events & Transactions -->
-                    <div class="space-y-8">
-                        <div>
-                            <div class="flex justify-between items-center mb-4 border-b dark:border-gray-700 pb-2">
-                                <h3 class="text-lg font-semibold">Events</h3>
-                            </div>
-                            
-                            <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm mb-4">
-                                <p class="text-xs font-bold text-gray-500 uppercase mb-2">Create New Event</p>
-                                <input type="text" id="new-event-name" placeholder="Event Name" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-2 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
-                                <div class="flex flex-wrap gap-2 mb-2">
-                                    <div class="flex-1 min-w-[100px]"><label class="text-xs text-gray-500">Goal ($)</label><input type="number" id="new-event-goal" placeholder="Opt" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner text-sm bg-white dark:bg-gray-700"></div>
-                                    <div class="flex-1 min-w-[160px]"><label class="text-xs text-gray-500">Start (Opt)</label><input type="datetime-local" id="new-event-start" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner text-xs bg-white dark:bg-gray-700"></div>
-                                    <div class="flex-1 min-w-[160px]"><label class="text-xs text-gray-500">End (Opt)</label><input type="datetime-local" id="new-event-end" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner text-xs bg-white dark:bg-gray-700"></div>
-                                </div>
-                                <button onclick="addEvent()" class="w-full bg-blue-600 text-white font-semibold py-2 rounded text-sm hover:opacity-90">Add Event</button>
-                            </div>
-
-                            <div id="events-list" class="space-y-4"></div>
+                    <!-- PANE: Teams -->
+                    <div id="mgmt-view-entities" class="mgmt-pane hidden">
+                        <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm mb-4 max-w-xl">
+                            <p class="text-xs font-bold text-gray-500 uppercase mb-2">Register New Entity</p>
+                            <input type="text" id="new-ent-public" placeholder="Public Name" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-2 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+                            <input type="text" id="new-ent-private" placeholder="Private Name (Optional)" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-2 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+                            <input type="url" id="new-ent-img" placeholder="Image URL (Optional)" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-2 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+                            <button onclick="addEntity()" class="w-full bg-blue-600 text-white font-semibold py-2 rounded text-sm hover:opacity-90">Add Entity</button>
                         </div>
 
-                        <div>
-                            <div class="flex justify-between items-center mb-4 border-b dark:border-gray-700 pb-2">
-                                <h3 class="text-lg font-semibold">Transactions (Active Event)</h3>
-                            </div>
-                            <div class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-sm max-h-96 overflow-y-auto p-2">
-                                <div id="transactions-list" class="space-y-2">
-                                    <!-- Populated via JS -->
-                                </div>
-                            </div>
-                        </div>
-
+                        <div id="entities-list" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
                     </div>
+
+                    <!-- PANE: Events -->
+                    <div id="mgmt-view-events" class="mgmt-pane hidden">
+                        <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm mb-4 max-w-xl">
+                            <p class="text-xs font-bold text-gray-500 uppercase mb-2">Create New Event</p>
+                            <input type="text" id="new-event-name" placeholder="Event Name" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-2 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+                            <div class="flex flex-wrap gap-2 mb-2">
+                                <div class="flex-1 min-w-[100px]"><label class="text-xs text-gray-500">Goal ($)</label><input type="number" id="new-event-goal" placeholder="Opt" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner text-sm bg-white dark:bg-gray-700"></div>
+                                <div class="flex-1 min-w-[160px]"><label class="text-xs text-gray-500">Start (Opt)</label><input type="datetime-local" id="new-event-start" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner text-xs bg-white dark:bg-gray-700"></div>
+                                <div class="flex-1 min-w-[160px]"><label class="text-xs text-gray-500">End (Opt)</label><input type="datetime-local" id="new-event-end" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner text-xs bg-white dark:bg-gray-700"></div>
+                            </div>
+                            <button onclick="addEvent()" class="w-full bg-blue-600 text-white font-semibold py-2 rounded text-sm hover:opacity-90">Add Event</button>
+                        </div>
+
+                        <div id="events-list" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+                    </div>
+
+                    <!-- PANE: Transactions -->
+                    <div id="mgmt-view-transactions" class="mgmt-pane hidden">
+                        <div class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-sm p-2 max-w-2xl">
+                            <div id="transactions-list" class="space-y-2">
+                                <!-- Populated via JS -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PANE: Raw JSON editor. h-full so the textarea can flex to
+                         fill the pane instead of relying on the outer scroll. -->
+                    <div id="mgmt-view-json" class="mgmt-pane hidden h-full flex flex-col">
+                        <div class="flex-shrink-0 flex flex-wrap gap-3 justify-between items-start mb-2">
+                            <p class="text-xs text-gray-500 dark:text-gray-400 max-w-md">
+                                Edit the raw dataset directly for bulk changes. <strong>Saving replaces the entire stored file</strong> with what's below — validate carefully.
+                            </p>
+                            <div class="flex gap-2 flex-shrink-0">
+                                <button onclick="reloadJsonEditor()" class="text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 font-semibold py-1.5 px-3 rounded transition-colors">Reload from Server</button>
+                                <button onclick="saveJsonEditor()" id="json-editor-save-btn" class="text-xs bg-blue-600 hover:opacity-90 text-white font-semibold py-1.5 px-4 rounded transition-colors">Save Changes</button>
+                            </div>
+                        </div>
+                        <div id="json-editor-message" class="hidden text-xs font-medium mb-2 flex-shrink-0"></div>
+                        <textarea id="json-editor" spellcheck="false" class="flex-1 min-h-[300px] w-full font-mono text-xs p-3 border border-gray-400 dark:border-gray-600 rounded shadow-inner bg-white dark:bg-gray-900 outline-none focus:ring-2 focus:ring-blue-500 resize-none"></textarea>
+                    </div>
+
                 </div>
             </div>
 
@@ -249,11 +271,16 @@
         const REDIRECT_URI = isLocalhost ? window.location.origin + window.location.pathname : 'https://adambeltz2.github.io/Simple-Live-Tally/'; 
         const FILE_PATH = '/data.json';
         
-        let accessToken = null;
-        let currentRev = null;
-        let appData = null;
-        let refreshTimer = 60;
-        let countdownInterval = null;
+        // var (not let/const): keeps these as real `window` properties, so
+        // app state stays introspectable/settable from outside the script
+        // (devtools, tests) rather than living in a script-only lexical scope.
+        var accessToken = null;
+        var currentRev = null;
+        var appData = null;
+        var refreshTimer = 60;
+        var countdownInterval = null;
+        var currentMgmtTab = 'settings';
+        var isSubmittingTransaction = false;
 
         const defaultData = {
             settings: { title: "Simple Live Tally", logoUrl: "", themeColor: "bg-blue-600" },
@@ -307,7 +334,25 @@
             document.getElementById('view-dashboard').classList.toggle('hidden', tab !== 'dashboard');
             document.getElementById('view-management').classList.toggle('hidden', tab !== 'management');
             applyThemeColor();
-            if (tab === 'management') renderManagement();
+            if (tab === 'management') {
+                renderManagement();
+                switchMgmtTab(currentMgmtTab);
+            }
+        }
+
+        const MGMT_TABS = ['settings', 'entities', 'events', 'transactions', 'json'];
+
+        function switchMgmtTab(tab) {
+            currentMgmtTab = tab;
+            MGMT_TABS.forEach((t) => {
+                document.getElementById(`mgmt-view-${t}`).classList.toggle('hidden', t !== tab);
+                document.getElementById(`mgmt-tab-${t}`).classList.toggle('active', t === tab);
+            });
+            // Populate the editor lazily, and only if it's untouched — never
+            // clobber a draft the operator is mid-edit on just by tab-switching.
+            if (tab === 'json' && !document.getElementById('json-editor').value.trim()) {
+                loadJsonEditor();
+            }
         }
 
         function checkViewMode() {
@@ -564,6 +609,8 @@
             } else if (result.status === 'conflict-exhausted') {
                 alert("Couldn't save your change after several attempts due to a data conflict. Please try again.");
             }
+
+            return result;
         }
 
         // Settings & Factory Reset
@@ -589,6 +636,58 @@
                     appData.transactions = [];
                     appData.activeEventId = "";
                 });
+            }
+        }
+
+        // Raw JSON bulk editor
+        function loadJsonEditor() {
+            document.getElementById('json-editor').value = JSON.stringify(appData, null, 2);
+            document.getElementById('json-editor-message').classList.add('hidden');
+        }
+
+        function showJsonEditorMessage(text, isSuccess) {
+            const msg = document.getElementById('json-editor-message');
+            msg.textContent = text;
+            msg.className = `text-xs font-medium mb-2 flex-shrink-0 ${isSuccess ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`;
+            msg.classList.remove('hidden');
+        }
+
+        async function reloadJsonEditor() {
+            if (!confirm("Reload from the server? Any unsaved edits in this editor will be lost.")) return;
+            await fetchState();
+            loadJsonEditor();
+        }
+
+        async function saveJsonEditor() {
+            const textarea = document.getElementById('json-editor');
+            const result = parseAppDataJson(textarea.value);
+
+            if (!result.valid) {
+                showJsonEditorMessage(result.error, false);
+                return;
+            }
+
+            if (!confirm("This will overwrite the entire saved dataset with the JSON below. Continue?")) return;
+
+            const saveBtn = document.getElementById('json-editor-save-btn');
+            saveBtn.disabled = true;
+            saveBtn.innerText = 'Saving...';
+
+            const updateResult = await updateDataWrapper(() => {
+                appData = result.data;
+                if (!appData.activeEventId && appData.events.length > 0) appData.activeEventId = appData.events[0].id;
+            });
+
+            saveBtn.disabled = false;
+            saveBtn.innerText = 'Save Changes';
+
+            if (updateResult.status === 'success') {
+                // Reflects the post-save, normalized data; the failure paths
+                // leave the textarea untouched so the operator's draft isn't lost.
+                showJsonEditorMessage('Saved.', true);
+                loadJsonEditor();
+            } else {
+                showJsonEditorMessage('Save failed — see the alert for details. Your edits above are unchanged.', false);
             }
         }
 
@@ -697,6 +796,7 @@
             const amount = parseFloat(document.getElementById('amount-input').value);
 
             if (!entityId || isNaN(amount)) return;
+            isSubmittingTransaction = true;
             btn.disabled = true; btn.innerText = "Saving...";
 
             const newTx = {
@@ -713,13 +813,21 @@
 
             updateDataWrapper(() => {
                 appData.transactions.push(newTx);
-            }).then(() => {
-                msg.textContent = "Transaction saved.";
-                msg.className = "text-sm mt-2 text-green-600 block";
-                document.getElementById('amount-input').value = '';
-                setTimeout(() => { msg.className = "hidden"; }, 3000);
+            }).then((result) => {
+                isSubmittingTransaction = false;
                 btn.disabled = false; btn.innerText = "Submit Vote";
-                refreshTimer = 60;
+
+                if (result.status === 'success') {
+                    msg.textContent = "Transaction saved.";
+                    msg.className = "text-sm mt-2 text-green-600 block";
+                    document.getElementById('amount-input').value = '';
+                    setTimeout(() => { msg.className = "hidden"; }, 3000);
+                    refreshTimer = 60;
+                } else {
+                    // updateDataWrapper already alerted with the specific reason.
+                    msg.textContent = "Transaction not saved — see the alert above for details.";
+                    msg.className = "text-sm mt-2 text-red-600 block";
+                }
             });
         }
 
@@ -881,7 +989,12 @@
                 document.getElementById('ticker-wrapper').classList.add('hidden');
                 return;
             } else {
-                if(submitBtn && !submitBtn.disabled) { 
+                // Guarded by isSubmittingTransaction (not submitBtn.disabled) so this
+                // can always recover the button from a prior "Setup Required" state
+                // once an event/team exists, while still leaving an in-flight
+                // "Saving..." submission alone.
+                if (submitBtn && !isSubmittingTransaction) {
+                    submitBtn.disabled = false;
                     submitBtn.innerText = "Submit Vote";
                     submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
                     amtInput.disabled = false;
@@ -976,27 +1089,25 @@
 
             // --- Render Leaderboard Bars ---
             const board = document.getElementById('leaderboard');
-            board.innerHTML = '';
+            const overflowNote = document.getElementById('leaderboard-overflow');
 
             const tagPadding = isTvMode ? 'py-0.5 px-4 text-lg' : 'py-1 px-3 text-sm';
             const barHeight = isTvMode ? 'h-8 mb-3' : 'h-8 mb-4';
             const badgeBg = isTvMode ? 'bg-gray-800 text-gray-200 border border-gray-700' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700';
             const trackBg = isTvMode ? 'bg-gray-800' : 'bg-gray-200 dark:bg-gray-800';
 
-            const displayEntities = isTvMode ? sortedEntities.slice(0, 10) : sortedEntities;
-
-            displayEntities.forEach(ent => {
+            function buildRowHtml(ent) {
                 const amount = totals[ent.id];
                 const percentage = computeBarPercentage(amount, maxTotal);
                 const imgHtml = ent.imageUrl ? `<img src="${escapeHtml(ent.imageUrl)}" class="w-6 h-6 rounded-full mr-2 inline-block object-cover border border-gray-300 dark:border-gray-600">` : '';
 
-                const amountInsideBar = amount > 0 
+                const amountInsideBar = amount > 0
                     ? `<div class="absolute inset-y-0 left-0 flex items-center ${isTvMode ? 'pl-4' : 'pl-3'} pointer-events-none">
                            <span class="text-white font-bold ${isTvMode ? 'text-lg' : 'text-sm'} drop-shadow-md">$${amount.toFixed(2)}</span>
-                       </div>` 
+                       </div>`
                     : '';
 
-                board.innerHTML += `
+                return `
                     <div class="relative pt-1">
                         <div class="flex mb-1 items-center justify-between">
                             <div class="flex items-center">
@@ -1009,8 +1120,36 @@
                             ${amountInsideBar}
                         </div>
                     </div>`;
-            });
-            
+            }
+
+            function renderRows(list) {
+                board.innerHTML = list.map(buildRowHtml).join('');
+            }
+
+            const tvDisplayEntities = sortedEntities.slice(0, 10);
+            renderRows(isTvMode ? tvDisplayEntities : sortedEntities);
+
+            if (!isTvMode && sortedEntities.length > 0) {
+                // Rows are already laid out (even though overflow is clipped), so
+                // measure the real rendered row height and trim to whatever
+                // actually fits instead of letting the board scroll.
+                const rowGap = parseFloat(getComputedStyle(board).rowGap) || 0;
+                const rowHeight = board.firstElementChild ? board.firstElementChild.getBoundingClientRect().height : 0;
+                const available = board.clientHeight;
+                const maxVisible = computeMaxVisibleRows(available, rowHeight, rowGap);
+
+                if (maxVisible < sortedEntities.length) {
+                    renderRows(sortedEntities.slice(0, maxVisible));
+                    const hiddenCount = sortedEntities.length - maxVisible;
+                    overflowNote.textContent = `+ ${hiddenCount} more not shown — resize or maximize the window to see the full board`;
+                    overflowNote.classList.remove('hidden');
+                } else {
+                    overflowNote.classList.add('hidden');
+                }
+            } else {
+                overflowNote.classList.add('hidden');
+            }
+
             runCountdown();
         }
 

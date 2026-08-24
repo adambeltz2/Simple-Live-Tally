@@ -36,10 +36,6 @@ from this list — this file is only what's still outstanding.
 - [ ] **Add ESLint + Prettier.** No lint/format config exists; add one and
       wire it into `.github/workflows/test.yml` so style issues are caught
       in CI, not just on push.
-- [ ] **DOM-level render tests.** `test/logic.test.js` covers the pure
-      logic; `renderApp()`/`renderManagement()` themselves (DOM output,
-      escaping applied correctly end-to-end) are still untested. A small
-      jsdom-based suite would close that gap.
 
 ## Reliability
 
@@ -52,6 +48,14 @@ from this list — this file is only what's still outstanding.
       and drops the change — an operator has to redo the entry. Worth a
       small local queue that retries once connectivity returns, given the
       target environment (venue wifi) is exactly where this happens.
+- [ ] **Bulk JSON editor bypasses per-record validation.** Saving through
+      the "Raw JSON" tab only checks the top-level shape (`validateAppDataShape`
+      in `js/logic.js`) — it doesn't re-run entity name uniqueness or any
+      future URL scheme allowlist the individual forms enforce. Also, since
+      it replaces the entire file, a concurrent edit made by someone else
+      between opening the editor and hitting Save is silently overwritten
+      (no merge) — acceptable for a power-user bulk-edit tool, but worth
+      calling out in the UI if it becomes a recurring pain point.
 
 ## Product / docs
 
