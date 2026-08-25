@@ -49,13 +49,13 @@ Clone or fork this repository into your own GitHub account and enable **GitHub P
    *(Optional: You can also add `http://localhost:8000/` or `http://127.0.0.1:5500/` for local testing).*
 
 ### 4. Connect Your App Key
-Open `index.html`, locate the configuration block at the top of the script, and ensure your Dropbox App Key is set:
+Open `js/app.js`, locate the configuration block at the top of the file, and ensure your Dropbox App Key is set:
 
 ```javascript
 const CLIENT_ID = 'your_dropbox_app_key_here';
 ```
 
-That's it — commit and push. GitHub Pages serves `index.html`, `js/logic.js`, and `css/tailwind.css` as static files; no build step is required to deploy.
+That's it — commit and push. GitHub Pages serves `index.html`, `js/app.js`, `js/logic.js`, `css/tailwind.css`, and `css/app.css` as static files; no build step is required to deploy.
 
 ---
 
@@ -66,14 +66,14 @@ The deployed app is plain static files, but a couple of dev-only tools live behi
 ```bash
 npm install           # dev dependencies only (tailwindcss, eslint, prettier, ...)
 npm test              # runs the test/ suite (Node's built-in test runner)
-npm run lint          # ESLint — covers js/logic.js, test/*.js, and index.html's inline <script>
-npm run format        # Prettier — formats js/logic.js and test/*.js (not index.html, see below)
+npm run lint          # ESLint — covers js/app.js, js/logic.js, test/*.js
+npm run format        # Prettier — formats js/app.js, js/logic.js, and test/*.js (not index.html, see below)
 npm run format:check  # same, but only checks — this is what CI runs
 ```
 
 ### Rebuilding the stylesheet
 
-`css/tailwind.css` is a precompiled, minified stylesheet generated from the Tailwind utility classes actually used in `index.html` (see `tailwind.config.js` / `css/input.css`). If you add a **new** Tailwind class to `index.html` that isn't already used elsewhere in the file, regenerate it:
+`css/tailwind.css` is a precompiled, minified stylesheet generated from the Tailwind utility classes actually used in `index.html` and `js/*.js` (Tailwind's content scanner covers both — see `tailwind.config.js` / `css/input.css` — since some classes, like status/badge colors, only ever appear inside JS template strings). If you add a **new** Tailwind class anywhere it isn't already used, regenerate it:
 
 ```bash
 npm run build:css
@@ -83,7 +83,11 @@ and commit the updated `css/tailwind.css`. Classes not present in the compiled s
 
 ### Linting & formatting scope
 
-`index.html` mixes markup and its inline `<script>` in one file. ESLint lints the inline script's JS (via `eslint-plugin-html`) for real correctness issues, but Prettier does **not** reformat `index.html` — running a general-purpose formatter over the whole file (markup + script together) would produce a large, low-value diff. Prettier only formats the standalone `.js` files (`js/logic.js`, `test/*.js`).
+`index.html` is pure markup — a `<meta http-equiv="Content-Security-Policy">` tag, `<link>`/`<script src>` tags, and the page body — with no inline `<script>` or `<style>` of its own (see [Content Security Policy](#content-security-policy) below for why). All app logic lives in `js/app.js` and `js/logic.js`, which ESLint and Prettier both cover like any other JS file. Prettier still doesn't reformat `index.html` itself; a general-purpose formatter run over hand-tuned markup would produce a diff with little value.
+
+### Content Security Policy
+
+`index.html` sets a strict CSP with no `'unsafe-inline'` anywhere. That's why the app's logic lives in `js/app.js` (an external script) instead of an inline `<script>` block, its custom CSS lives in `css/app.css` instead of an inline `<style>` block, and every interactive element is wired up via `addEventListener` in `bindStaticEventListeners()` (`js/app.js`) instead of `onclick="..."`/`onchange="..."` attributes — dynamically-rendered lists (events/entities/transactions) use one delegated click listener per container (`data-action`/`data-id` attributes) rather than re-binding on every render. If you fork this and add a new interactive element, follow the same pattern: give it an `id` (or `data-action` for a dynamically-rendered one) and wire it in `bindStaticEventListeners()`, rather than reaching for `onclick="..."`.
 
 ---
 

@@ -1,0 +1,53 @@
+/* Hand-written CSS (not Tailwind-generated). Kept as a separate stylesheet
+   rather than an inline <style> block so the CSP style-src directive in
+   index.html can stay 'self' only, with no 'unsafe-inline'. */
+
+@keyframes marquee {
+    0% {
+        transform: translateX(0%);
+    }
+    100% {
+        transform: translateX(-50%);
+    }
+}
+.animate-marquee {
+    display: flex;
+    width: max-content;
+    animation: marquee 25s linear infinite;
+}
+.animate-marquee:hover {
+    animation-play-state: paused;
+}
+/* Custom Scrollbar for inner lists */
+::-webkit-scrollbar {
+    width: 8px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+.dark ::-webkit-scrollbar-thumb {
+    background: #475569;
+}
+/* Data Management sub-navigation */
+.mgmt-tab-btn {
+    color: #6b7280;
+    border-color: transparent;
+}
+.mgmt-tab-btn:hover {
+    color: #374151;
+}
+.dark .mgmt-tab-btn:hover {
+    color: #d1d5db;
+}
+.mgmt-tab-btn.active {
+    color: #2563eb;
+    border-color: #2563eb;
+}
+.dark .mgmt-tab-btn.active {
+    color: #60a5fa;
+    border-color: #60a5fa;
+}

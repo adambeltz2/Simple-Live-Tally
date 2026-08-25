@@ -7,27 +7,14 @@ from this list — this file is only what's still outstanding.
 ## Feature
 - [ ] Process for allowing the dashboard to be on a different device than the data management. Allowing many computers to log into the same "event" for maximum capabilities
 
-## Security
-
-- [ ] **Add a Content-Security-Policy.** Blocked today by the inline
-      `onclick="..."` handlers used throughout `index.html` — a strict CSP
-      can't allow inline event handlers. Requires moving those to
-      `addEventListener` first (see structural split below).
-
 ## Code quality / maintainability
 
-- [ ] **Finish the structural split.** `js/logic.js` (1.12.0) carries the
-      pure totals/sort/gauge/retry logic, but DOM rendering, auth, and the
-      Dropbox API calls are still one ~700-line inline `<script>` in
-      `index.html`. Splitting those into their own files (e.g.
-      `js/dropbox-api.js`, `js/render.js`) would make the file navigable
-      and testable in pieces, without adding a build step.
-- [ ] **Replace inline `onclick="..."` handlers with `addEventListener`.**
-      Needed for the CSP item above, and makes the render functions easier
-      to unit test. Also re-enables `no-unused-vars` for `index.html` in
-      `eslint.config.js` (currently off there — see the comment on that
-      rule — because `eslint-plugin-html` can't see an `onclick="..."`
-      attribute as a usage of the function it calls).
+- [ ] **Split `js/app.js` into focused modules.** It carries auth, the
+      Dropbox API calls, and all rendering in one ~950-line file (extracted
+      from `index.html`'s inline `<script>` in 1.16.0 so the CSP could drop
+      `'unsafe-inline'`). Splitting it further into e.g. `js/dropbox-api.js`
+      / `js/render.js` would make it navigable and testable in pieces,
+      without adding a build step.
 
 ## Reliability
 
