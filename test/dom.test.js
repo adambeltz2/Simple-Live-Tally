@@ -30,13 +30,16 @@ function loadApp() {
 }
 
 function baseAppData(overrides) {
-    return Object.assign({
-        settings: { title: 'Test Event', logoUrl: '', themeColor: 'bg-blue-600' },
-        events: [{ id: 'evt1', name: 'Main', goalAmount: null, startDate: '', endDate: '' }],
-        activeEventId: 'evt1',
-        entities: [],
-        transactions: []
-    }, overrides);
+    return Object.assign(
+        {
+            settings: { title: 'Test Event', logoUrl: '', themeColor: 'bg-blue-600' },
+            events: [{ id: 'evt1', name: 'Main', goalAmount: null, startDate: '', endDate: '' }],
+            activeEventId: 'evt1',
+            entities: [],
+            transactions: [],
+        },
+        overrides,
+    );
 }
 
 test('DOM: top-level and management sub-tab navigation', async (t) => {
@@ -72,8 +75,9 @@ test('DOM: top-level and management sub-tab navigation', async (t) => {
         window.switchTab('management');
         ['settings', 'entities', 'events', 'transactions', 'json', 'settings'].forEach((tab) => {
             window.switchMgmtTab(tab);
-            const visible = ['settings', 'entities', 'events', 'transactions', 'json']
-                .filter((t) => !window.document.getElementById(`mgmt-view-${t}`).classList.contains('hidden'));
+            const visible = ['settings', 'entities', 'events', 'transactions', 'json'].filter(
+                (t) => !window.document.getElementById(`mgmt-view-${t}`).classList.contains('hidden'),
+            );
             assert.deepEqual(visible, [tab]);
         });
     });
@@ -85,12 +89,26 @@ test('DOM: dashboard rendering', async (t) => {
         window.appData = baseAppData({
             entities: [
                 { id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' },
-                { id: 'e2', namePublic: 'Team B', namePrivate: '', imageUrl: '', color: 'bg-blue-500' }
+                { id: 'e2', namePublic: 'Team B', namePrivate: '', imageUrl: '', color: 'bg-blue-500' },
             ],
             transactions: [
-                { id: 't1', entityId: 'e1', eventId: 'evt1', amount: 50, createDate: new Date().toISOString(), modifiedDate: new Date().toISOString() },
-                { id: 't2', entityId: 'e1', eventId: 'evt1', amount: 25, createDate: new Date().toISOString(), modifiedDate: new Date().toISOString() }
-            ]
+                {
+                    id: 't1',
+                    entityId: 'e1',
+                    eventId: 'evt1',
+                    amount: 50,
+                    createDate: new Date().toISOString(),
+                    modifiedDate: new Date().toISOString(),
+                },
+                {
+                    id: 't2',
+                    entityId: 'e1',
+                    eventId: 'evt1',
+                    amount: 25,
+                    createDate: new Date().toISOString(),
+                    modifiedDate: new Date().toISOString(),
+                },
+            ],
         });
 
         window.renderApp();
@@ -108,39 +126,42 @@ test('DOM: dashboard rendering', async (t) => {
         assert.match(window.document.getElementById('leaderboard').innerHTML, /empty/i);
     });
 
-    await t.test('regression: the Submit button recovers once setup is completed (was stuck on "Setup Required")', () => {
-        const window = loadApp();
-        const { document } = window;
-        const submitBtn = document.getElementById('submit-btn');
-        const amtInput = document.getElementById('amount-input');
+    await t.test(
+        'regression: the Submit button recovers once setup is completed (was stuck on "Setup Required")',
+        () => {
+            const window = loadApp();
+            const { document } = window;
+            const submitBtn = document.getElementById('submit-btn');
+            const amtInput = document.getElementById('amount-input');
 
-        // Start with no events/entities: renderApp disables the button.
-        window.appData = baseAppData({ events: [], entities: [] });
-        window.renderApp();
-        assert.equal(submitBtn.disabled, true);
-        assert.equal(submitBtn.innerText, 'Setup Required');
+            // Start with no events/entities: renderApp disables the button.
+            window.appData = baseAppData({ events: [], entities: [] });
+            window.renderApp();
+            assert.equal(submitBtn.disabled, true);
+            assert.equal(submitBtn.innerText, 'Setup Required');
 
-        // Adding an event + team and re-rendering must re-enable it. The bug
-        // was that the re-enable branch checked `!submitBtn.disabled` — since
-        // the button was already disabled, it could never flip back.
-        window.appData = baseAppData({
-            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }]
-        });
-        window.renderApp();
+            // Adding an event + team and re-rendering must re-enable it. The bug
+            // was that the re-enable branch checked `!submitBtn.disabled` — since
+            // the button was already disabled, it could never flip back.
+            window.appData = baseAppData({
+                entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+            });
+            window.renderApp();
 
-        assert.equal(submitBtn.disabled, false, 'button must recover once an event and team exist');
-        assert.equal(submitBtn.innerText, 'Submit Vote');
-        assert.equal(amtInput.disabled, false);
-        assert.equal(submitBtn.classList.contains('opacity-50'), false);
-        assert.equal(submitBtn.classList.contains('cursor-not-allowed'), false);
-    });
+            assert.equal(submitBtn.disabled, false, 'button must recover once an event and team exist');
+            assert.equal(submitBtn.innerText, 'Submit Vote');
+            assert.equal(amtInput.disabled, false);
+            assert.equal(submitBtn.classList.contains('opacity-50'), false);
+            assert.equal(submitBtn.classList.contains('cursor-not-allowed'), false);
+        },
+    );
 
     await t.test('an in-flight "Saving..." submission is not reset by a concurrent renderApp() call', () => {
         const window = loadApp();
         const submitBtn = window.document.getElementById('submit-btn');
 
         window.appData = baseAppData({
-            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }]
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
         });
         window.renderApp();
         assert.equal(submitBtn.disabled, false);
@@ -161,13 +182,15 @@ test('DOM: dashboard rendering', async (t) => {
     await t.test('XSS regression: a malicious entity name cannot inject a live element', () => {
         const window = loadApp();
         window.appData = baseAppData({
-            entities: [{
-                id: 'e1',
-                namePublic: '<img src=x onerror="window.__pwned=true">',
-                namePrivate: '',
-                imageUrl: '',
-                color: 'bg-red-500'
-            }]
+            entities: [
+                {
+                    id: 'e1',
+                    namePublic: '<img src=x onerror="window.__pwned=true">',
+                    namePrivate: '',
+                    imageUrl: '',
+                    color: 'bg-red-500',
+                },
+            ],
         });
 
         window.renderApp();
@@ -175,7 +198,11 @@ test('DOM: dashboard rendering', async (t) => {
         const board = window.document.getElementById('leaderboard');
         assert.equal(board.querySelectorAll('img').length, 0, 'the payload must not become a real <img> element');
         assert.equal(window.__pwned, undefined, 'onerror must never execute');
-        assert.match(board.textContent, /<img src=x onerror="window\.__pwned=true">/, 'the name should render as visible text, not markup');
+        assert.match(
+            board.textContent,
+            /<img src=x onerror="window\.__pwned=true">/,
+            'the name should render as visible text, not markup',
+        );
     });
 });
 
@@ -226,7 +253,11 @@ test('DOM: bulk JSON editor', async (t) => {
         window.appData = baseAppData();
         window.switchTab('management');
         window.switchMgmtTab('json');
-        window.document.getElementById('json-editor').value = JSON.stringify({ settings: {}, entities: [], transactions: [] });
+        window.document.getElementById('json-editor').value = JSON.stringify({
+            settings: {},
+            entities: [],
+            transactions: [],
+        });
 
         await window.saveJsonEditor();
 
@@ -247,7 +278,7 @@ test('DOM: bulk JSON editor', async (t) => {
                     ok: true,
                     status: 200,
                     headers: { get: () => JSON.stringify({ rev: 'rev2' }) },
-                    json: async () => baseAppData()
+                    json: async () => baseAppData(),
                 };
             }
             if (String(url).includes('/upload')) {
@@ -274,9 +305,11 @@ test('DOM: input validation', async (t) => {
     await t.test('submitTransaction rejects a non-positive amount without attempting to save', () => {
         const window = loadApp();
         window.appData = baseAppData({
-            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }]
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
         });
-        window.fetch = async () => { throw new Error('fetch should not be called for an invalid submission'); };
+        window.fetch = async () => {
+            throw new Error('fetch should not be called for an invalid submission');
+        };
         window.renderApp();
 
         window.document.getElementById('entity-select').value = 'e1';
@@ -291,7 +324,9 @@ test('DOM: input validation', async (t) => {
     await t.test('addEntity rejects a non-http(s) image URL and never attempts to save', () => {
         const window = loadApp();
         window.appData = baseAppData();
-        window.fetch = async () => { throw new Error('fetch should not be called for an invalid entity'); };
+        window.fetch = async () => {
+            throw new Error('fetch should not be called for an invalid entity');
+        };
         window.alert = () => {};
         window.switchTab('management');
         window.switchMgmtTab('entities');
@@ -306,7 +341,9 @@ test('DOM: input validation', async (t) => {
     await t.test('saveSettings rejects a non-http(s) logo URL and never attempts to save', () => {
         const window = loadApp();
         window.appData = baseAppData();
-        window.fetch = async () => { throw new Error('fetch should not be called for invalid settings'); };
+        window.fetch = async () => {
+            throw new Error('fetch should not be called for invalid settings');
+        };
         window.alert = () => {};
         window.switchTab('management');
         window.switchMgmtTab('settings');

@@ -8,7 +8,7 @@
         '<': '&lt;',
         '>': '&gt;',
         '"': '&quot;',
-        "'": '&#39;'
+        "'": '&#39;',
     };
 
     // Neutralizes HTML metacharacters so untrusted strings (entity names,
@@ -23,7 +23,9 @@
     // no transactions still appear in the result with a total of 0.
     function computeTotals(entities, transactions, eventId) {
         const totals = {};
-        (entities || []).forEach((e) => { totals[e.id] = 0; });
+        (entities || []).forEach((e) => {
+            totals[e.id] = 0;
+        });
         (transactions || [])
             .filter((t) => t.eventId === eventId)
             .forEach((t) => {
@@ -51,7 +53,7 @@
             return { percentage: 0, dashOffset: arrayLength };
         }
         const percentage = Math.min((totalRaised / goalAmount) * 100, 100);
-        const dashOffset = arrayLength - (arrayLength * percentage / 100);
+        const dashOffset = arrayLength - (arrayLength * percentage) / 100;
         return { percentage, dashOffset };
     }
 
@@ -208,7 +210,7 @@
         runUpdateWithRetry,
         computeMaxVisibleRows,
         validateAppDataShape,
-        parseAppDataJson
+        parseAppDataJson,
     };
 
     if (typeof module !== 'undefined' && module.exports) {

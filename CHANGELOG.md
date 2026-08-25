@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0] - 2026-08-24
+### Added
+- **ESLint + Prettier:** `eslint.config.js` lints `js/logic.js`, `test/*.js`, `tailwind.config.js`, and — via `eslint-plugin-html` — the inline `<script>` in `index.html`. Prettier formats the standalone `.js` files (`index.html` is intentionally left out to avoid a large, low-value reformat of markup + script together). Both are wired into CI (`npm run lint`, `npm run format:check`) so style/correctness issues are caught before merge, not just on push.
+
 ## [1.14.0] - 2026-08-24
 ### Security
 - **Constrained `imageUrl`/`logoUrl` to http(s) schemes:** Entity and logo image URLs were only HTML-escaped, with no scheme restriction. `isAllowedMediaUrl()` (`js/logic.js`) now rejects `javascript:`, `data:`, and other non-http(s) values in `addEntity`, `editEntity`, and `saveSettings`, before they're ever saved.

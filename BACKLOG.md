@@ -24,10 +24,10 @@ from this list — this file is only what's still outstanding.
       and testable in pieces, without adding a build step.
 - [ ] **Replace inline `onclick="..."` handlers with `addEventListener`.**
       Needed for the CSP item above, and makes the render functions easier
-      to unit test.
-- [ ] **Add ESLint + Prettier.** No lint/format config exists; add one and
-      wire it into `.github/workflows/test.yml` so style issues are caught
-      in CI, not just on push.
+      to unit test. Also re-enables `no-unused-vars` for `index.html` in
+      `eslint.config.js` (currently off there — see the comment on that
+      rule — because `eslint-plugin-html` can't see an `onclick="..."`
+      attribute as a usage of the function it calls).
 
 ## Reliability
 

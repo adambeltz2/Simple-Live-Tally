@@ -64,8 +64,11 @@ That's it — commit and push. GitHub Pages serves `index.html`, `js/logic.js`, 
 The deployed app is plain static files, but a couple of dev-only tools live behind `npm` for people modifying the code:
 
 ```bash
-npm install        # dev dependencies only (tailwindcss, for rebuilding css/tailwind.css)
-npm test           # runs the test/ suite against js/logic.js with Node's built-in test runner
+npm install           # dev dependencies only (tailwindcss, eslint, prettier, ...)
+npm test              # runs the test/ suite (Node's built-in test runner)
+npm run lint          # ESLint — covers js/logic.js, test/*.js, and index.html's inline <script>
+npm run format        # Prettier — formats js/logic.js and test/*.js (not index.html, see below)
+npm run format:check  # same, but only checks — this is what CI runs
 ```
 
 ### Rebuilding the stylesheet
@@ -77,6 +80,10 @@ npm run build:css
 ```
 
 and commit the updated `css/tailwind.css`. Classes not present in the compiled stylesheet simply won't be styled — there's no runtime compiler anymore.
+
+### Linting & formatting scope
+
+`index.html` mixes markup and its inline `<script>` in one file. ESLint lints the inline script's JS (via `eslint-plugin-html`) for real correctness issues, but Prettier does **not** reformat `index.html` — running a general-purpose formatter over the whole file (markup + script together) would produce a large, low-value diff. Prettier only formats the standalone `.js` files (`js/logic.js`, `test/*.js`).
 
 ---
 
