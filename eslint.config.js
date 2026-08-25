@@ -1,11 +1,10 @@
 const js = require('@eslint/js');
-const html = require('eslint-plugin-html');
 const prettierConfig = require('eslint-config-prettier');
 const globals = require('globals');
 
 // Names js/logic.js attaches to `window` (see the `api` object at the
-// bottom of that file) when loaded as a plain <script> — index.html's
-// inline script calls these as globals, not via require/import.
+// bottom of that file) when loaded as a plain <script> — js/app.js calls
+// these as globals, not via require/import.
 const logicGlobals = {
     escapeHtml: 'readonly',
     computeTotals: 'readonly',
@@ -43,18 +42,9 @@ module.exports = [
         },
     },
     {
-        files: ['test/**/*.js', 'eslint.config.js', 'tailwind.config.js'],
-        languageOptions: {
-            ecmaVersion: 2022,
-            sourceType: 'commonjs',
-            globals: {
-                ...globals.node,
-            },
-        },
-    },
-    {
-        files: ['index.html'],
-        plugins: { html },
+        // js/app.js: browser-only, loaded via <script src="js/app.js"> after
+        // js/logic.js. Not require()'d anywhere, so no Node globals needed.
+        files: ['js/app.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'script',
@@ -64,15 +54,15 @@ module.exports = [
                 JSZip: 'readonly',
             },
         },
-        rules: {
-            // Most top-level functions here are only ever called from an
-            // onclick="..." attribute, which eslint-plugin-html can't see as
-            // a usage (it only lints <script> contents, not attribute
-            // strings) — so no-unused-vars would flag the entire public
-            // surface of the app as dead code. Revisit once the
-            // onclick -> addEventListener backlog item lands, since actual
-            // callback references would make this rule meaningful again.
-            'no-unused-vars': 'off',
+    },
+    {
+        files: ['test/**/*.js', 'eslint.config.js', 'tailwind.config.js'],
+        languageOptions: {
+            ecmaVersion: 2022,
+            sourceType: 'commonjs',
+            globals: {
+                ...globals.node,
+            },
         },
     },
 ];

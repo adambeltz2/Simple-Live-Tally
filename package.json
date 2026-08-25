@@ -1,6 +1,6 @@
 {
   "name": "simple-live-tally",
-  "version": "1.15.0",
+  "version": "1.16.0",
   "private": true,
   "description": "Serverless, BYOS fundraising/voting tally display. Dev tooling only — the deployed app is the static index.html + css/js files.",
   "scripts": {
@@ -14,7 +14,6 @@
     "@eslint/js": "^10.0.1",
     "eslint": "^10.9.1",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-html": "^8.1.4",
     "globals": "^17.11.0",
     "jsdom": "^30.0.1",
     "prettier": "^3.9.6",

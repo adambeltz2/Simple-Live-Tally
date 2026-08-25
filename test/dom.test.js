@@ -3,29 +3,27 @@
 // runScripts:"outside-only" parses markup but never auto-runs a <script>),
 // then exercise the real app functions against a real DOM. This complements
 // logic.test.js (which only covers the DOM-free pure functions) by checking
-// the wiring: that index.html actually calls them correctly, that escaping
-// survives all the way to rendered markup, and that the new sub-tab / JSON
-// editor UI behaves as expected.
+// the wiring: that index.html/js/app.js actually call them correctly, that
+// escaping survives all the way to rendered markup, and that the sub-tab /
+// JSON editor UI behaves as expected.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { JSDOM } = require('jsdom');
 
-const HTML_PATH = path.join(__dirname, '../index.html');
-const LOGIC_PATH = path.join(__dirname, '../js/logic.js');
-const HTML_SOURCE = fs.readFileSync(HTML_PATH, 'utf8');
-const LOGIC_SOURCE = fs.readFileSync(LOGIC_PATH, 'utf8');
-
-const INLINE_SCRIPT = HTML_SOURCE.match(/<script(?![^>]*src)[^>]*>([\s\S]*?)<\/script>/)[1];
+const HTML_SOURCE = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+const LOGIC_SOURCE = fs.readFileSync(path.join(__dirname, '../js/logic.js'), 'utf8');
+const APP_SOURCE = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
 
 function loadApp() {
     const dom = new JSDOM(HTML_SOURCE, { runScripts: 'outside-only', url: 'http://localhost/' });
     const { window } = dom;
-    // logic.js is loaded first, exactly like the <script src="js/logic.js">
-    // tag that precedes the inline script in index.html.
+    // Same order as index.html's <script> tags: js/logic.js, then js/app.js.
+    // app.js wires all its event listeners (bindStaticEventListeners) as a
+    // top-level statement, so evaluating it here reproduces real page load.
     window.eval(LOGIC_SOURCE);
-    window.eval(INLINE_SCRIPT);
+    window.eval(APP_SOURCE);
     return window;
 }
 
@@ -352,5 +350,137 @@ test('DOM: input validation', async (t) => {
         window.saveSettings();
 
         assert.equal(window.appData.settings.logoUrl, '', 'settings must be untouched on rejection');
+    });
+});
+
+// The tests above call app functions directly (window.switchTab(...), etc.),
+// which is fine for testing the functions themselves but never exercises the
+// addEventListener/delegation wiring that replaced onclick="..." attributes
+// (see bindStaticEventListeners in js/app.js). These specifically dispatch
+// real DOM events so a wiring mistake (wrong id, un-attached listener,
+// wrong data-action key) would actually fail here.
+test('DOM: event wiring (addEventListener / delegation, not direct calls)', async (t) => {
+    await t.test('clicking the dark mode toggle button flips the dark class', () => {
+        const window = loadApp();
+        const wasDark = window.document.documentElement.classList.contains('dark');
+        window.document.getElementById('dark-mode-toggle').click();
+        assert.equal(window.document.documentElement.classList.contains('dark'), !wasDark);
+    });
+
+    await t.test('clicking the management tab button switches the visible view', () => {
+        const window = loadApp();
+        window.document.getElementById('tab-management').click();
+        assert.equal(window.document.getElementById('view-management').classList.contains('hidden'), false);
+        assert.equal(window.document.getElementById('view-dashboard').classList.contains('hidden'), true);
+    });
+
+    await t.test('clicking a management sub-tab button switches the visible pane', () => {
+        const window = loadApp();
+        window.document.getElementById('tab-management').click();
+        window.document.getElementById('mgmt-tab-events').click();
+        assert.equal(window.document.getElementById('mgmt-view-events').classList.contains('hidden'), false);
+        assert.equal(window.document.getElementById('mgmt-tab-events').classList.contains('active'), true);
+    });
+
+    await t.test('clicking Admin View prevents navigation and opens a new tab instead', () => {
+        const window = loadApp();
+        const opened = [];
+        window.open = (...args) => opened.push(args);
+
+        const link = window.document.getElementById('admin-view-link');
+        const event = new window.MouseEvent('click', { bubbles: true, cancelable: true });
+        link.dispatchEvent(event);
+
+        assert.equal(event.defaultPrevented, true, 'the href="#" navigation must be prevented');
+        assert.equal(opened.length, 1);
+    });
+
+    await t.test('the submit button click is wired to submitTransaction (invalid input still reaches it)', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.renderApp();
+        window.document.getElementById('entity-select').value = 'e1';
+        window.document.getElementById('amount-input').value = '-5';
+
+        window.document.getElementById('submit-btn').click();
+
+        assert.match(
+            window.document.getElementById('entry-message').textContent,
+            /positive amount/,
+            'clicking submit-btn should reach submitTransaction, same as calling it directly',
+        );
+    });
+
+    await t.test('changing the active-event select is wired to changeActiveEvent', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            events: [
+                { id: 'evt1', name: 'First', goalAmount: null, startDate: '', endDate: '' },
+                { id: 'evt2', name: 'Second', goalAmount: null, startDate: '', endDate: '' },
+            ],
+            activeEventId: 'evt1',
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.renderApp();
+
+        const fetchCalls = [];
+        window.fetch = async (url) => {
+            fetchCalls.push(String(url));
+            return { ok: false, status: 500 };
+        };
+
+        const select = window.document.getElementById('active-event-select');
+        select.value = 'evt2';
+        select.dispatchEvent(new window.Event('change', { bubbles: true }));
+
+        assert.ok(
+            fetchCalls.some((u) => u.includes('/download')),
+            'changing the select should reach changeActiveEvent -> updateDataWrapper -> a save attempt',
+        );
+    });
+
+    await t.test(
+        'a delegated click on a dynamically-rendered list button reaches its handler with the right id',
+        () => {
+            const window = loadApp();
+            window.appData = baseAppData({
+                entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+            });
+            window.confirm = () => true;
+            const fetchCalls = [];
+            window.fetch = async (url) => {
+                fetchCalls.push(String(url));
+                return { ok: false, status: 500 };
+            };
+            window.renderManagement();
+
+            const purgeBtn = window.document.querySelector(
+                '#entities-list button[data-action="purge-entity"][data-id="e1"]',
+            );
+            assert.ok(purgeBtn, 'expected a rendered purge-entity button for entity e1');
+            purgeBtn.click();
+
+            assert.ok(
+                fetchCalls.some((u) => u.includes('/download')),
+                'the delegated click should have reached purgeEntity -> updateDataWrapper -> a save attempt',
+            );
+        },
+    );
+
+    await t.test('clicking an unrelated part of a list container (no data-action) does nothing', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.fetch = async () => {
+            throw new Error('a click with no data-action target must not trigger any handler');
+        };
+        window.renderManagement();
+
+        assert.doesNotThrow(() => {
+            window.document.getElementById('entities-list').click();
+        });
     });
 });

@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0] - 2026-08-25
+### Security
+- **Content-Security-Policy:** Added a strict CSP (`default-src 'self'`, no `'unsafe-inline'` anywhere) via a `<meta>` tag in `index.html`. Required extracting the app's inline `<script>` into `js/app.js` and its inline `<style>` block into `css/app.css` (CSP's script-src/style-src block inline content, not just `onclick="..."`-style attribute handlers), and replacing every `onclick="..."`/`onchange="..."` attribute and the one `javascript:` href with `addEventListener` — static elements bind directly, dynamically-rendered lists (events/entities/transactions) use one delegated listener per container via `data-action`/`data-id` attributes instead of re-binding on every render.
+### Changed
+- **`js/app.js` extracted from `index.html`.** All app logic (auth, Dropbox API calls, rendering, event wiring) now lives in its own file, loaded via `<script src="js/app.js">`. `tailwind.config.js`'s `content` glob updated to scan `js/*.js` too, since Tailwind classes referenced only inside JS template strings (badge/status colors, etc.) would otherwise silently stop being generated now that they're no longer in `index.html` itself.
+- **ESLint:** dropped `eslint-plugin-html` (no longer needed — there's no more inline script in `index.html` to lint via it) and the `no-unused-vars` override that came with it; real unused-variable checking now applies to `js/app.js`, which caught two genuinely dead locals during this change.
+### Added
+- **DOM event-wiring tests (`test/dom.test.js`):** New test group dispatches real `click`/`change` events (dark mode toggle, tab navigation, the submit button, the active-event select, and a delegated list-button click) rather than calling app functions directly, so a wiring mistake in `bindStaticEventListeners()` would actually be caught.
+
 ## [1.15.0] - 2026-08-24
 ### Added
 - **ESLint + Prettier:** `eslint.config.js` lints `js/logic.js`, `test/*.js`, `tailwind.config.js`, and — via `eslint-plugin-html` — the inline `<script>` in `index.html`. Prettier formats the standalone `.js` files (`index.html` is intentionally left out to avoid a large, low-value reformat of markup + script together). Both are wired into CI (`npm run lint`, `npm run format:check`) so style/correctness issues are caught before merge, not just on push.
