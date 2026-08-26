@@ -13,6 +13,7 @@ const {
     runUpdateWithRetry,
     computeMaxVisibleRows,
     validateAppDataShape,
+    validateAppDataRecords,
     parseAppDataJson,
 } = require('../js/logic.js');
 
@@ -405,6 +406,78 @@ test('validateAppDataShape', async (t) => {
     });
 });
 
+test('validateAppDataRecords', async (t) => {
+    const base = () => ({
+        settings: { logoUrl: '' },
+        events: [],
+        entities: [],
+        transactions: [],
+    });
+
+    await t.test('accepts empty entities/transactions and an empty logo URL', () => {
+        assert.deepEqual(validateAppDataRecords(base()), { valid: true });
+    });
+
+    await t.test('accepts well-formed entities, settings, and transactions', () => {
+        const data = base();
+        data.entities = [
+            { id: 'e1', namePublic: 'Team Alpha', imageUrl: 'https://example.com/a.png' },
+            { id: 'e2', namePublic: 'Team Beta', imageUrl: '' },
+        ];
+        data.settings.logoUrl = 'https://example.com/logo.png';
+        data.transactions = [{ id: 't1', amount: 25 }];
+        assert.deepEqual(validateAppDataRecords(data), { valid: true });
+    });
+
+    await t.test('rejects an entity with a blank/missing public name', () => {
+        const data = base();
+        data.entities = [{ id: 'e1', namePublic: '  ' }];
+        const result = validateAppDataRecords(data);
+        assert.equal(result.valid, false);
+        assert.match(result.error, /public name/);
+    });
+
+    await t.test('rejects duplicate entity public names (case/trim-insensitive)', () => {
+        const data = base();
+        data.entities = [
+            { id: 'e1', namePublic: 'Team Alpha' },
+            { id: 'e2', namePublic: '  team alpha  ' },
+        ];
+        const result = validateAppDataRecords(data);
+        assert.equal(result.valid, false);
+        assert.match(result.error, /Duplicate entity public name/);
+    });
+
+    await t.test('rejects an entity image URL that fails the scheme allowlist', () => {
+        const data = base();
+        data.entities = [{ id: 'e1', namePublic: 'Team Alpha', imageUrl: 'javascript:alert(1)' }];
+        const result = validateAppDataRecords(data);
+        assert.equal(result.valid, false);
+        assert.match(result.error, /image URL/);
+    });
+
+    await t.test('rejects a settings logo URL that fails the scheme allowlist', () => {
+        const data = base();
+        data.settings.logoUrl = 'data:text/html,<script>alert(1)</script>';
+        const result = validateAppDataRecords(data);
+        assert.equal(result.valid, false);
+        assert.match(result.error, /Settings logo URL/);
+    });
+
+    await t.test('rejects a transaction with a non-positive or missing amount', () => {
+        const data = base();
+        data.transactions = [{ id: 't1', amount: 0 }];
+        const zeroResult = validateAppDataRecords(data);
+        assert.equal(zeroResult.valid, false);
+        assert.match(zeroResult.error, /invalid amount/);
+
+        data.transactions = [{ id: 't2' }];
+        const missingResult = validateAppDataRecords(data);
+        assert.equal(missingResult.valid, false);
+        assert.match(missingResult.error, /invalid amount/);
+    });
+});
+
 test('parseAppDataJson', async (t) => {
     await t.test('parses and accepts valid, well-formed JSON', () => {
         const json = JSON.stringify({ settings: { title: 'X' }, events: [], entities: [], transactions: [] });
@@ -429,5 +502,20 @@ test('parseAppDataJson', async (t) => {
         const result = parseAppDataJson(JSON.stringify({ settings: {}, entities: [], transactions: [] }));
         assert.equal(result.valid, false);
         assert.match(result.error, /events/);
+    });
+
+    await t.test('reports a record-validation error for a shape-valid but invalid record', () => {
+        const json = JSON.stringify({
+            settings: {},
+            events: [],
+            entities: [
+                { id: 'e1', namePublic: 'Team Alpha' },
+                { id: 'e2', namePublic: 'Team Alpha' },
+            ],
+            transactions: [],
+        });
+        const result = parseAppDataJson(json);
+        assert.equal(result.valid, false);
+        assert.match(result.error, /Duplicate entity public name/);
     });
 });

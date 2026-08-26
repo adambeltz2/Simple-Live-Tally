@@ -182,9 +182,53 @@
         return { valid: true };
     }
 
+    // Per-record validation for the bulk JSON editor: the same checks the
+    // individual entity/settings/transaction forms enforce (public name
+    // required + unique, image/logo URL scheme allowlist, positive
+    // transaction amounts), run across every record in an already
+    // shape-valid appData object. Assumes validateAppDataShape() has
+    // already passed, so entities/transactions are arrays and settings is
+    // an object.
+    function validateAppDataRecords(parsed) {
+        const seenNames = new Set();
+        for (const entity of parsed.entities) {
+            const name = ((entity && entity.namePublic) || '').trim();
+            if (!name) {
+                return {
+                    valid: false,
+                    error: `Entity "${(entity && entity.id) || '(no id)'}" is missing a public name.`,
+                };
+            }
+            const key = name.toLowerCase();
+            if (seenNames.has(key)) {
+                return { valid: false, error: `Duplicate entity public name: "${name}".` };
+            }
+            seenNames.add(key);
+            if (!isAllowedMediaUrl(entity.imageUrl)) {
+                return {
+                    valid: false,
+                    error: `Entity "${name}" has an invalid image URL (must be http:// or https://).`,
+                };
+            }
+        }
+        if (!isAllowedMediaUrl(parsed.settings.logoUrl)) {
+            return { valid: false, error: 'Settings logo URL must be a valid http:// or https:// link.' };
+        }
+        for (const tx of parsed.transactions) {
+            if (!isValidTransactionAmount(tx && tx.amount)) {
+                return {
+                    valid: false,
+                    error: `Transaction "${(tx && tx.id) || '(no id)'}" has an invalid amount (must be a positive number).`,
+                };
+            }
+        }
+        return { valid: true };
+    }
+
     // Parses and validates the bulk JSON editor's text in one step: a
-    // JSON.parse() syntax error and a shape-validation failure both come
-    // back through the same { valid, error } / { valid, data } shape.
+    // JSON.parse() syntax error, a shape-validation failure, and a
+    // per-record validation failure all come back through the same
+    // { valid, error } / { valid, data } shape.
     function parseAppDataJson(text) {
         let parsed;
         try {
@@ -194,6 +238,8 @@
         }
         const shapeResult = validateAppDataShape(parsed);
         if (!shapeResult.valid) return shapeResult;
+        const recordsResult = validateAppDataRecords(parsed);
+        if (!recordsResult.valid) return recordsResult;
         return { valid: true, data: parsed };
     }
 
@@ -210,6 +256,7 @@
         runUpdateWithRetry,
         computeMaxVisibleRows,
         validateAppDataShape,
+        validateAppDataRecords,
         parseAppDataJson,
     };
 

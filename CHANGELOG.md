@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] - 2026-08-26
+### Fixed
+- **Bulk JSON editor bypassed per-record validation:** Saving through the "Raw JSON" tab only checked the top-level shape (`validateAppDataShape`) — a pasted/edited dataset with a blank or duplicate entity public name, a `javascript:`/`data:` image or logo URL, or a zero/negative/missing transaction amount would save without complaint, even though the individual entity/settings/transaction forms already reject all of these. `validateAppDataRecords()` (`js/logic.js`) now runs the same checks (`isDuplicateName`-equivalent uniqueness, `isAllowedMediaUrl`, `isValidTransactionAmount`) across every record, wired into `parseAppDataJson()` so `saveJsonEditor()` gets a specific rejection message instead of silently accepting bad data.
+
 ## [1.16.0] - 2026-08-25
 ### Security
 - **Content-Security-Policy:** Added a strict CSP (`default-src 'self'`, no `'unsafe-inline'` anywhere) via a `<meta>` tag in `index.html`. Required extracting the app's inline `<script>` into `js/app.js` and its inline `<style>` block into `css/app.css` (CSP's script-src/style-src block inline content, not just `onclick="..."`-style attribute handlers), and replacing every `onclick="..."`/`onchange="..."` attribute and the one `javascript:` href with `addEventListener` — static elements bind directly, dynamically-rendered lists (events/entities/transactions) use one delegated listener per container via `data-action`/`data-id` attributes instead of re-binding on every render.

@@ -1,6 +1,6 @@
 {
   "name": "simple-live-tally",
-  "version": "1.16.0",
+  "version": "1.17.0",
   "private": true,
   "description": "Serverless, BYOS fundraising/voting tally display. Dev tooling only — the deployed app is the static index.html + css/js files.",
   "scripts": {
