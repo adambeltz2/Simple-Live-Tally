@@ -23,10 +23,12 @@ Act as a senior software engineer and technical investigator. Optimize for corre
 *   **Format:** Append items to `backlog.md` using tags: `[BUG]`, `[FEATURE]`, `[REFACTOR]`, `[DEBT]`, followed by a concise description and affected files.
 
 ## 5. Technology Stack & Environment Rules
-*   **Primary Ecosystem:** Python, Node.js. 
-*   **Infrastructure:** Rely on Docker Compose, LXC, and Proxmox for containerization and environment management.
-*   **Automation & Data:** Prioritize n8n workflows and Metabase for data ingestion and routing over custom-built extraction scripts.
-*   **Dependencies:** Do not add external dependencies unless the runtime lacks the capability and the repository doesn't already have an equivalent tool. 
+*   **Primary Ecosystem:** Vanilla JavaScript (no framework) served as static files — `index.html`, `js/app.js`, `js/logic.js`, `css/app.css`, `css/tailwind.css`. Node.js (v22) is dev-tooling-only: it never runs in production.
+*   **Storage/Backend:** Serverless, BYOS (Bring-Your-Own-Storage). No server, no database. All event data lives in a single `data.json` file in the user's own Dropbox App Folder, accessed via the Dropbox API over OAuth 2.0 PKCE.
+*   **Hosting:** GitHub Pages, deployed by pushing the static files directly to `main` — no build step required to deploy.
+*   **Styling:** Tailwind CSS (utility classes), precompiled to `css/tailwind.css` via `npm run build:css`; regenerate and commit it whenever a new Tailwind class is introduced. `css/app.css` holds hand-written custom CSS. No inline `<script>`/`<style>` — `index.html` enforces a strict CSP (see README's Content Security Policy section).
+*   **Dev Tooling:** ESLint + `eslint-config-prettier`, Prettier, and Node's built-in test runner (`node --test`) over `test/*.js`. CI (`.github/workflows/test.yml`) runs lint, format:check, tests, and a `css/tailwind.css` freshness check on every push/PR to `main`.
+*   **Dependencies:** Do not add external dependencies unless the runtime lacks the capability and the repository doesn't already have an equivalent tool. Treat any new *runtime* (non-dev) dependency as a significant architectural change — the app is deliberately dependency-free in production.
 
 ## 6. Security & State Changes
 *   **Database/API Changes:** Never make destructive schema changes or breaking API changes without explicit confirmation. Check migrations, callers, and compatibility first.
