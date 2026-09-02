@@ -13,6 +13,7 @@ const {
     runUpdateWithRetry,
     computeMaxVisibleRows,
     validateAppDataShape,
+    validateAppDataRecords,
     parseAppDataJson,
 } = require('../js/logic.js');
 
@@ -405,6 +406,65 @@ test('validateAppDataShape', async (t) => {
     });
 });
 
+test('validateAppDataRecords', async (t) => {
+    function baseData(overrides) {
+        return Object.assign(
+            {
+                settings: { title: 'X', logoUrl: '' },
+                events: [],
+                entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '' }],
+                transactions: [],
+            },
+            overrides,
+        );
+    }
+
+    await t.test('accepts well-formed records', () => {
+        assert.deepEqual(validateAppDataRecords(baseData()), { valid: true });
+    });
+
+    await t.test('rejects an invalid settings.logoUrl', () => {
+        const result = validateAppDataRecords(baseData({ settings: { title: 'X', logoUrl: 'javascript:alert(1)' } }));
+        assert.equal(result.valid, false);
+        assert.match(result.error, /logoUrl/);
+    });
+
+    await t.test('rejects an entity with a blank namePublic', () => {
+        const result = validateAppDataRecords(baseData({ entities: [{ id: 'e1', namePublic: '  ', imageUrl: '' }] }));
+        assert.equal(result.valid, false);
+        assert.match(result.error, /namePublic/);
+    });
+
+    await t.test('rejects duplicate entity names (case/trim-insensitive)', () => {
+        const result = validateAppDataRecords(
+            baseData({
+                entities: [
+                    { id: 'e1', namePublic: 'Team A', imageUrl: '' },
+                    { id: 'e2', namePublic: '  team a  ', imageUrl: '' },
+                ],
+            }),
+        );
+        assert.equal(result.valid, false);
+        assert.match(result.error, /Duplicate entity name/);
+    });
+
+    await t.test('rejects an entity with an invalid imageUrl', () => {
+        const result = validateAppDataRecords(
+            baseData({ entities: [{ id: 'e1', namePublic: 'Team A', imageUrl: 'data:text/html,<script>x</script>' }] }),
+        );
+        assert.equal(result.valid, false);
+        assert.match(result.error, /imageUrl/);
+    });
+
+    await t.test('rejects a transaction with a non-positive amount', () => {
+        const result = validateAppDataRecords(
+            baseData({ transactions: [{ id: 't1', entityId: 'e1', eventId: 'evt1', amount: -5 }] }),
+        );
+        assert.equal(result.valid, false);
+        assert.match(result.error, /amount/);
+    });
+});
+
 test('parseAppDataJson', async (t) => {
     await t.test('parses and accepts valid, well-formed JSON', () => {
         const json = JSON.stringify({ settings: { title: 'X' }, events: [], entities: [], transactions: [] });
@@ -429,5 +489,34 @@ test('parseAppDataJson', async (t) => {
         const result = parseAppDataJson(JSON.stringify({ settings: {}, entities: [], transactions: [] }));
         assert.equal(result.valid, false);
         assert.match(result.error, /events/);
+    });
+
+    await t.test('reports a record-level error for a duplicate entity name, even though the shape is valid', () => {
+        const result = parseAppDataJson(
+            JSON.stringify({
+                settings: {},
+                events: [],
+                entities: [
+                    { id: 'e1', namePublic: 'Team A', imageUrl: '' },
+                    { id: 'e2', namePublic: 'Team A', imageUrl: '' },
+                ],
+                transactions: [],
+            }),
+        );
+        assert.equal(result.valid, false);
+        assert.match(result.error, /Duplicate entity name/);
+    });
+
+    await t.test('reports a record-level error for a bad transaction amount, even though the shape is valid', () => {
+        const result = parseAppDataJson(
+            JSON.stringify({
+                settings: {},
+                events: [],
+                entities: [],
+                transactions: [{ id: 't1', entityId: 'e1', eventId: 'evt1', amount: 0 }],
+            }),
+        );
+        assert.equal(result.valid, false);
+        assert.match(result.error, /amount/);
     });
 });

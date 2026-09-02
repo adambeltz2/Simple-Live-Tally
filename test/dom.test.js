@@ -262,6 +262,34 @@ test('DOM: bulk JSON editor', async (t) => {
         assert.match(window.document.getElementById('json-editor-message').textContent, /events/);
     });
 
+    await t.test(
+        'record-level problems (duplicate name, bad URL, bad amount) are rejected without ever attempting to save',
+        async () => {
+            const window = loadApp();
+            const original = baseAppData();
+            window.appData = original;
+            window.fetch = async () => {
+                throw new Error('fetch should not be called when record-level validation fails');
+            };
+            window.switchTab('management');
+            window.switchMgmtTab('json');
+            window.document.getElementById('json-editor').value = JSON.stringify({
+                settings: {},
+                events: [],
+                entities: [
+                    { id: 'e1', namePublic: 'Team A', imageUrl: '' },
+                    { id: 'e2', namePublic: 'Team A', imageUrl: '' },
+                ],
+                transactions: [],
+            });
+
+            await window.saveJsonEditor();
+
+            assert.match(window.document.getElementById('json-editor-message').textContent, /Duplicate entity name/);
+            assert.equal(window.appData, original, 'appData must be untouched on validation failure');
+        },
+    );
+
     await t.test('valid JSON is saved through the real fetch/save pipeline', async () => {
         const window = loadApp();
         window.appData = baseAppData();
