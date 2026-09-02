@@ -182,9 +182,50 @@
         return { valid: true };
     }
 
+    // Re-checks the same per-record rules the individual Settings/Teams/
+    // Transactions forms enforce (entity name required + unique, image/logo
+    // URL scheme, transaction amount) — validateAppDataShape only checks
+    // that the top-level fields are the right *type*, not that the records
+    // inside them are individually valid. Assumes shape validation has
+    // already passed (arrays/objects are the right kind), so it's safe to
+    // iterate. Fails on the first problem found rather than collecting all
+    // of them, matching validateAppDataShape's style.
+    function validateAppDataRecords(data) {
+        if (!isAllowedMediaUrl(data.settings.logoUrl)) {
+            return { valid: false, error: '"settings.logoUrl" must be a valid http:// or https:// link.' };
+        }
+
+        for (const entity of data.entities) {
+            if (!(entity.namePublic || '').trim()) {
+                return { valid: false, error: `Entity "${entity.id}" is missing a namePublic.` };
+            }
+            if (isDuplicateName(data.entities, entity.namePublic, entity.id)) {
+                return { valid: false, error: `Duplicate entity name: "${entity.namePublic}".` };
+            }
+            if (!isAllowedMediaUrl(entity.imageUrl)) {
+                return {
+                    valid: false,
+                    error: `Entity "${entity.namePublic}" has an invalid imageUrl (must be http:// or https://).`,
+                };
+            }
+        }
+
+        for (const tx of data.transactions) {
+            if (!isValidTransactionAmount(tx.amount)) {
+                return {
+                    valid: false,
+                    error: `Transaction "${tx.id}" has an invalid amount (must be a positive number).`,
+                };
+            }
+        }
+
+        return { valid: true };
+    }
+
     // Parses and validates the bulk JSON editor's text in one step: a
-    // JSON.parse() syntax error and a shape-validation failure both come
-    // back through the same { valid, error } / { valid, data } shape.
+    // JSON.parse() syntax error, a shape-validation failure, and a
+    // per-record validation failure all come back through the same
+    // { valid, error } / { valid, data } shape.
     function parseAppDataJson(text) {
         let parsed;
         try {
@@ -194,6 +235,8 @@
         }
         const shapeResult = validateAppDataShape(parsed);
         if (!shapeResult.valid) return shapeResult;
+        const recordsResult = validateAppDataRecords(parsed);
+        if (!recordsResult.valid) return recordsResult;
         return { valid: true, data: parsed };
     }
 
@@ -210,6 +253,7 @@
         runUpdateWithRetry,
         computeMaxVisibleRows,
         validateAppDataShape,
+        validateAppDataRecords,
         parseAppDataJson,
     };
 

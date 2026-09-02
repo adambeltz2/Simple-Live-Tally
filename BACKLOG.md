@@ -22,14 +22,11 @@ from this list — this file is only what's still outstanding.
       and drops the change — an operator has to redo the entry. Worth a
       small local queue that retries once connectivity returns, given the
       target environment (venue wifi) is exactly where this happens.
-- [ ] **Bulk JSON editor bypasses per-record validation.** Saving through
-      the "Raw JSON" tab only checks the top-level shape (`validateAppDataShape`
-      in `js/logic.js`) — it doesn't re-run entity name uniqueness, the
-      `isAllowedMediaUrl` scheme allowlist, or the transaction amount check
-      that the individual forms enforce. Also, since it replaces the entire
-      file, a concurrent edit made by someone else between opening the
-      editor and hitting Save is silently overwritten (no merge) —
-      acceptable for a power-user bulk-edit tool, but worth calling out in
+- [ ] **Bulk JSON editor replaces the whole file, no merge.** Saving
+      through the "Raw JSON" tab overwrites the entire stored file, so a
+      concurrent edit made by someone else between opening the editor and
+      hitting Save is silently discarded (no merge, no conflict warning).
+      Acceptable for a power-user bulk-edit tool, but worth calling out in
       the UI if it becomes a recurring pain point.
 
 ## Process
