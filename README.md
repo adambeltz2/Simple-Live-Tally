@@ -4,6 +4,32 @@
 
 ---
 
+## Try It Live — No Setup Required
+
+You don't need to fork, clone, or deploy anything to use this. The app is already hosted at:
+
+### **[adambeltz2.github.io/Simple-Live-Tally](https://adambeltz2.github.io/Simple-Live-Tally/)**
+
+Just open that page and sign in with **your own** Dropbox account. Because of the BYOS design, the hosted copy has no shared backend or database — every visitor authenticates individually, and each person's event data is written only to a private `/Apps/Simple Live Tally/` folder inside *their own* Dropbox. Nobody else (including the person who runs this GitHub page) can see or touch it. You only need your own copy of this repository if you want to customize the branding/code or host it under your own domain — see [Quick Start & Deployment Guide](#quick-start--deployment-guide) below for that.
+
+---
+
+## Screenshots
+
+**Live Dashboard** — the leaderboard operators and guests watch update in real time, with an animated goal gauge and per-team progress bars.
+
+![Live Dashboard showing a leaderboard of five teams with a fundraising goal gauge](docs/screenshots/dashboard.png)
+
+**TV / Projector Display Mode** — append `#tv` to the URL for a high-contrast, full-bleed layout built for 1080p screens.
+
+![TV display mode with a dark, high-contrast leaderboard layout](docs/screenshots/tv-mode.png)
+
+**Data Management** — add/edit teams, events, and transactions from dedicated sub-tabs instead of one long scrolling page.
+
+![Data Management screen showing the Teams tab with editable team cards](docs/screenshots/management.png)
+
+---
+
 ## How It Works & Scope
 
 Simple Live Tally is a **single-operator, manual-entry tool**, not an open public voting system. One person (or a small team, all authenticated with the same Dropbox account) runs the "Add Transaction" panel and types in each donation or vote as it comes in; the "Live Dashboard" / TV mode is what the audience watches update in near real time. There's no public-facing submission form — anyone who can add a transaction already has full write access to the event's data.
