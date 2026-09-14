@@ -152,6 +152,26 @@
         return { status: 'conflict-exhausted' };
     }
 
+    // Drains a queue of pending update functions one at a time, in order,
+    // using the supplied run(updateFn) callback (expected to return the
+    // same { status, ... } shape runUpdateWithRetry does). Stops at the
+    // first non-success result and leaves it — and everything queued after
+    // it — in `remaining`, rather than dropping a write that still hasn't
+    // saved. Returns which items succeeded (already removed from the
+    // queue) so the caller can decide whether to re-render.
+    async function flushPendingQueue(queue, run) {
+        const remaining = [...queue];
+        const succeeded = [];
+        while (remaining.length > 0) {
+            const result = await run(remaining[0]);
+            if (result.status !== 'success') {
+                return { succeeded, remaining };
+            }
+            succeeded.push(remaining.shift());
+        }
+        return { succeeded, remaining };
+    }
+
     // How many rows fit in availableHeight without scrolling, given the
     // measured height of one row and the gap between rows. Falls back to
     // showing everything if rowHeight can't be measured (e.g. rendered
@@ -251,6 +271,7 @@
         isAllowedMediaUrl,
         computeRetryDelay,
         runUpdateWithRetry,
+        flushPendingQueue,
         computeMaxVisibleRows,
         validateAppDataShape,
         validateAppDataRecords,

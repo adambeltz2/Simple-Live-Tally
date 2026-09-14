@@ -23,6 +23,12 @@ var refreshTimer = 60;
 var countdownInterval = null;
 var currentMgmtTab = 'settings';
 var isSubmittingTransaction = false;
+// Updates that failed to save because of a network/conflict problem (not an
+// auth failure) wait here instead of being silently discarded — see
+// updateDataWrapper's allowQueue option and flushPendingWrites below.
+// In-memory only: a page reload loses anything still queued.
+var pendingQueue = [];
+var isFlushingQueue = false;
 
 const defaultData = {
     settings: { title: 'Simple Live Tally', logoUrl: '', themeColor: 'bg-blue-600' },
@@ -182,6 +188,7 @@ function checkViewMode() {
 }
 
 window.addEventListener('hashchange', checkViewMode);
+window.addEventListener('online', flushPendingWrites);
 
 // --- AUTHENTICATION & DROPBOX ---
 function generateRandomString(length) {
@@ -381,7 +388,15 @@ async function exportDataZip() {
 
 const MAX_SAVE_ATTEMPTS = 5;
 
-async function updateDataWrapper(updateFn) {
+// options.allowQueue (default true): when a save fails because of the
+// network or a save conflict (not an auth failure), queue updateFn for
+// automatic retry instead of discarding the change. Pass allowQueue:false
+// for operations where a *stale* deferred retry would be actively harmful
+// rather than just delayed — see saveJsonEditor(), which replaces the
+// entire file and would silently clobber intervening changes if re-applied
+// minutes later against a snapshot captured at click time.
+async function updateDataWrapper(updateFn, options) {
+    const allowQueue = !options || options.allowQueue !== false;
     const result = await runUpdateWithRetry({
         fetchState: fetchStateInternal,
         updateFn,
@@ -393,20 +408,64 @@ async function updateDataWrapper(updateFn) {
         applyThemeColor();
         renderApp();
         renderManagement();
+    } else if (result.status === 'save-failed') {
+        // handleAuthFailure() (called from saveState()) already alerted
+        // and is reloading the page — nothing else to do here.
+        console.error('Error saving:', result.error);
+    } else if (allowQueue) {
+        console.error('Error saving, queueing for retry:', result.error || result.status);
+        pendingQueue.push(updateFn);
+        renderPendingIndicator();
     } else if (result.status === 'fetch-failed') {
         console.error('Error refreshing state during update:', result.error);
         alert(
             "Couldn't reach Dropbox to sync the latest data. Your change was not saved — please check your connection and try again.",
         );
-    } else if (result.status === 'conflict-exhausted') {
+    } else {
         alert("Couldn't save your change after several attempts due to a data conflict. Please try again.");
-    } else if (result.status === 'save-failed') {
-        // handleAuthFailure() (called from saveState()) already alerted
-        // and is reloading the page — nothing else to do here.
-        console.error('Error saving:', result.error);
     }
 
     return result;
+}
+
+function renderPendingIndicator() {
+    const el = document.getElementById('pending-writes-indicator');
+    if (!el) return;
+    if (pendingQueue.length === 0) {
+        el.classList.add('hidden');
+        return;
+    }
+    el.textContent = `⏳ ${pendingQueue.length} pending — click to retry`;
+    el.classList.remove('hidden');
+}
+
+// Retries queued updates (from prior fetch/save failures) in order, stopping
+// at the first one that still doesn't succeed rather than dropping it or
+// anything queued behind it. Safe to call opportunistically (online event,
+// periodic refresh tick, manual click) since it's a no-op while already
+// running or when the queue is empty.
+async function flushPendingWrites() {
+    if (isFlushingQueue || pendingQueue.length === 0) return;
+    isFlushingQueue = true;
+    try {
+        const { succeeded, remaining } = await flushPendingQueue(pendingQueue, (updateFn) =>
+            runUpdateWithRetry({
+                fetchState: fetchStateInternal,
+                updateFn,
+                saveState,
+                maxAttempts: MAX_SAVE_ATTEMPTS,
+            }),
+        );
+        pendingQueue = remaining;
+        if (succeeded.length > 0) {
+            applyThemeColor();
+            renderApp();
+            renderManagement();
+        }
+    } finally {
+        isFlushingQueue = false;
+        renderPendingIndicator();
+    }
 }
 
 // Settings & Factory Reset
@@ -476,10 +535,13 @@ async function saveJsonEditor() {
     saveBtn.disabled = true;
     saveBtn.innerText = 'Saving...';
 
-    const updateResult = await updateDataWrapper(() => {
-        appData = result.data;
-        if (!appData.activeEventId && appData.events.length > 0) appData.activeEventId = appData.events[0].id;
-    });
+    const updateResult = await updateDataWrapper(
+        () => {
+            appData = result.data;
+            if (!appData.activeEventId && appData.events.length > 0) appData.activeEventId = appData.events[0].id;
+        },
+        { allowQueue: false },
+    );
 
     saveBtn.disabled = false;
     saveBtn.innerText = 'Save Changes';
@@ -662,10 +724,16 @@ function submitTransaction() {
                 msg.className = 'hidden';
             }, 3000);
             refreshTimer = 60;
-        } else {
+        } else if (result.status === 'save-failed') {
             // updateDataWrapper already alerted with the specific reason.
             msg.textContent = 'Transaction not saved — see the alert above for details.';
             msg.className = 'text-sm mt-2 text-red-600 block';
+        } else {
+            // fetch-failed / conflict-exhausted: updateDataWrapper queued it
+            // for automatic retry rather than alerting — the entry itself
+            // isn't lost, just delayed.
+            msg.textContent = "Couldn't save right now — queued, will retry automatically.";
+            msg.className = 'text-sm mt-2 text-yellow-600 block';
         }
     });
 }
@@ -1047,6 +1115,7 @@ function initApp() {
             if (refreshTimer <= 0) {
                 document.getElementById('countdown').innerText = 'Refreshing now...';
                 fetchState();
+                flushPendingWrites();
                 refreshTimer = 60;
             }
         }, 1000);
@@ -1071,6 +1140,7 @@ function bindStaticEventListeners() {
     document.getElementById('submit-btn').addEventListener('click', submitTransaction);
     document.getElementById('active-event-select').addEventListener('change', changeActiveEvent);
     document.getElementById('export-zip-btn').addEventListener('click', exportDataZip);
+    document.getElementById('pending-writes-indicator').addEventListener('click', flushPendingWrites);
 
     MGMT_TABS.forEach((tab) => {
         document.getElementById(`mgmt-tab-${tab}`).addEventListener('click', () => switchMgmtTab(tab));
