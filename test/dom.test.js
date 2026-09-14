@@ -512,3 +512,134 @@ test('DOM: event wiring (addEventListener / delegation, not direct calls)', asyn
         });
     });
 });
+
+// Lets the app's own async chains (updateDataWrapper -> runUpdateWithRetry
+// -> the mocked fetch) settle before assertions, since submitTransaction()
+// fires updateDataWrapper without the caller awaiting it.
+function flushAsync() {
+    return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+test('DOM: offline/queued writes', async (t) => {
+    await t.test('a network failure queues the change instead of alerting', async () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.accessToken = 'fake-token';
+        window.renderApp();
+        let alertCalled = false;
+        window.alert = () => {
+            alertCalled = true;
+        };
+        window.fetch = async () => ({ ok: false, status: 500 });
+
+        window.document.getElementById('entity-select').value = 'e1';
+        window.document.getElementById('amount-input').value = '10';
+        window.submitTransaction();
+        await flushAsync();
+
+        assert.equal(alertCalled, false, 'a queueable failure must not alert');
+        assert.equal(window.pendingQueue.length, 1);
+        assert.match(window.document.getElementById('entry-message').textContent, /queued/);
+
+        const indicator = window.document.getElementById('pending-writes-indicator');
+        assert.equal(indicator.classList.contains('hidden'), false);
+        assert.match(indicator.textContent, /1 pending/);
+    });
+
+    await t.test('flushPendingWrites drains the queue once saves succeed again', async () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.accessToken = 'fake-token';
+        window.renderApp();
+        window.fetch = async () => ({ ok: false, status: 500 });
+
+        window.document.getElementById('entity-select').value = 'e1';
+        window.document.getElementById('amount-input').value = '10';
+        window.submitTransaction();
+        await flushAsync();
+        assert.equal(window.pendingQueue.length, 1, 'sanity check: the write should be queued first');
+
+        window.fetch = async (url) => {
+            if (String(url).includes('/download')) {
+                return {
+                    ok: true,
+                    status: 200,
+                    headers: { get: () => JSON.stringify({ rev: 'rev2' }) },
+                    json: async () => baseAppData(),
+                };
+            }
+            return { ok: true, status: 200, json: async () => ({ rev: 'rev3' }) };
+        };
+
+        await window.flushPendingWrites();
+
+        assert.equal(window.pendingQueue.length, 0, 'the queue should drain once saves succeed');
+        assert.equal(
+            window.document.getElementById('pending-writes-indicator').classList.contains('hidden'),
+            true,
+            'the indicator should hide once the queue is empty',
+        );
+    });
+
+    await t.test('clicking the pending-writes indicator triggers a flush', async () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.accessToken = 'fake-token';
+        window.renderApp();
+        window.fetch = async () => ({ ok: false, status: 500 });
+        window.document.getElementById('entity-select').value = 'e1';
+        window.document.getElementById('amount-input').value = '10';
+        window.submitTransaction();
+        await flushAsync();
+        assert.equal(window.pendingQueue.length, 1);
+
+        window.fetch = async (url) => {
+            if (String(url).includes('/download')) {
+                return {
+                    ok: true,
+                    status: 200,
+                    headers: { get: () => JSON.stringify({ rev: 'rev2' }) },
+                    json: async () => baseAppData(),
+                };
+            }
+            return { ok: true, status: 200, json: async () => ({ rev: 'rev3' }) };
+        };
+
+        window.document.getElementById('pending-writes-indicator').click();
+        await flushAsync();
+
+        assert.equal(window.pendingQueue.length, 0, 'the click should have drained the queue');
+    });
+
+    await t.test('the bulk JSON editor opts out of queueing and keeps the immediate-alert behavior', async () => {
+        const window = loadApp();
+        window.appData = baseAppData();
+        window.accessToken = 'fake-token';
+        window.confirm = () => true;
+        let alertCalled = false;
+        window.alert = () => {
+            alertCalled = true;
+        };
+        window.fetch = async () => ({ ok: false, status: 500 });
+
+        window.switchTab('management');
+        window.switchMgmtTab('json');
+        window.document.getElementById('json-editor').value = JSON.stringify(baseAppData());
+
+        await window.saveJsonEditor();
+
+        assert.equal(window.pendingQueue.length, 0, 'the JSON editor must never queue a stale full-file snapshot');
+        assert.equal(alertCalled, true, 'a fetch failure on the JSON editor must still alert immediately');
+        assert.match(
+            window.document.getElementById('json-editor-message').textContent,
+            /Save failed/,
+            'the editor message should reflect the immediate failure, not a queued one',
+        );
+    });
+});

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.0] - 2026-09-14
+### Added
+- **Offline/queued writes:** A save that fails because Dropbox can't be reached, or because a save conflict couldn't be resolved after the usual retries, no longer surfaces an alert and drops the change. It's queued locally instead (`pendingQueue` in `js/app.js`, drained in order by `flushPendingQueue()` in `js/logic.js`) and retried automatically — on the next `online` event, on the existing 60s background refresh tick, or immediately via a new pending-writes indicator button in the header (click to retry now). A stopped-at-the-first-failure design means a write that still can't save, and anything queued behind it, stays queued rather than being silently dropped or applied out of order. The one exception is the bulk "Raw JSON" editor: since it replaces the entire dataset from a snapshot captured at click time, queueing it for a later retry risks silently clobbering intervening changes with stale data, so it keeps the old immediate-alert-on-failure behavior (`updateDataWrapper(fn, { allowQueue: false })`).
+### Changed
+- **`BACKLOG.md`:** Removed the "Split `js/app.js` into focused modules" item — on reflection it's organizational only (no genuine module/encapsulation boundary without switching to ES modules, a materially larger and different change), so it isn't worth carrying as a real backlog item.
+
 ## [1.17.0] - 2026-09-02
 ### Fixed
 - **Bulk JSON editor bypassed per-record validation:** Saving through the "Raw JSON" tab only checked the top-level shape (`validateAppDataShape`) — it could silently save duplicate entity names, `javascript:`/`data:` image or logo URLs, or non-positive transaction amounts, none of which the individual Settings/Teams/Transactions forms would allow. `validateAppDataRecords()` (`js/logic.js`) now re-runs those same checks — entity name required + unique, `isAllowedMediaUrl` scheme allowlist, `isValidTransactionAmount` — as part of `parseAppDataJson()`, so the JSON editor enforces the same rules as the rest of the app.

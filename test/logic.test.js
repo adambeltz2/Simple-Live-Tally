@@ -11,6 +11,7 @@ const {
     isAllowedMediaUrl,
     computeRetryDelay,
     runUpdateWithRetry,
+    flushPendingQueue,
     computeMaxVisibleRows,
     validateAppDataShape,
     validateAppDataRecords,
@@ -350,6 +351,48 @@ test('runUpdateWithRetry', async (t) => {
         assert.equal(result.error, authError);
         assert.equal(saveAttempts, 1, 'must not retry after a save failure that is not a conflict');
         assert.equal(delayCalls, 0, 'must not wait on a backoff delay for a non-retryable failure');
+    });
+});
+
+test('flushPendingQueue', async (t) => {
+    await t.test('drains every item in order on repeated success', async () => {
+        const ran = [];
+        const result = await flushPendingQueue(['a', 'b', 'c'], async (item) => {
+            ran.push(item);
+            return { status: 'success' };
+        });
+        assert.deepEqual(ran, ['a', 'b', 'c']);
+        assert.deepEqual(result.succeeded, ['a', 'b', 'c']);
+        assert.deepEqual(result.remaining, []);
+    });
+
+    await t.test('stops at the first failure, leaving it and everything after it queued', async () => {
+        const ran = [];
+        const result = await flushPendingQueue(['a', 'b', 'c'], async (item) => {
+            ran.push(item);
+            if (item === 'b') return { status: 'fetch-failed' };
+            return { status: 'success' };
+        });
+        assert.deepEqual(ran, ['a', 'b'], 'must not attempt items after a failure');
+        assert.deepEqual(result.succeeded, ['a']);
+        assert.deepEqual(result.remaining, ['b', 'c']);
+    });
+
+    await t.test('an empty queue is a no-op', async () => {
+        let called = false;
+        const result = await flushPendingQueue([], async () => {
+            called = true;
+            return { status: 'success' };
+        });
+        assert.equal(called, false);
+        assert.deepEqual(result.succeeded, []);
+        assert.deepEqual(result.remaining, []);
+    });
+
+    await t.test('a failure on the first item leaves the queue untouched', async () => {
+        const result = await flushPendingQueue(['a', 'b'], async () => ({ status: 'conflict-exhausted' }));
+        assert.deepEqual(result.succeeded, []);
+        assert.deepEqual(result.remaining, ['a', 'b']);
     });
 });
 

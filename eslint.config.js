@@ -16,6 +16,7 @@ const logicGlobals = {
     isAllowedMediaUrl: 'readonly',
     computeRetryDelay: 'readonly',
     runUpdateWithRetry: 'readonly',
+    flushPendingQueue: 'readonly',
     computeMaxVisibleRows: 'readonly',
     validateAppDataShape: 'readonly',
     parseAppDataJson: 'readonly',

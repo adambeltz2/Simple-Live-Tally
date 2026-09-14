@@ -7,21 +7,8 @@ from this list — this file is only what's still outstanding.
 ## Feature
 - [ ] Process for allowing the dashboard to be on a different device than the data management. Allowing many computers to log into the same "event" for maximum capabilities
 
-## Code quality / maintainability
-
-- [ ] **Split `js/app.js` into focused modules.** It carries auth, the
-      Dropbox API calls, and all rendering in one ~950-line file (extracted
-      from `index.html`'s inline `<script>` in 1.16.0 so the CSP could drop
-      `'unsafe-inline'`). Splitting it further into e.g. `js/dropbox-api.js`
-      / `js/render.js` would make it navigable and testable in pieces,
-      without adding a build step.
-
 ## Reliability
 
-- [ ] **Offline/queued writes.** A failed save currently surfaces an alert
-      and drops the change — an operator has to redo the entry. Worth a
-      small local queue that retries once connectivity returns, given the
-      target environment (venue wifi) is exactly where this happens.
 - [ ] **Bulk JSON editor replaces the whole file, no merge.** Saving
       through the "Raw JSON" tab overwrites the entire stored file, so a
       concurrent edit made by someone else between opening the editor and
