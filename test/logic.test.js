@@ -9,6 +9,9 @@ const {
     isDuplicateName,
     isValidTransactionAmount,
     isAllowedMediaUrl,
+    VIEWER_HASH,
+    isViewerHash,
+    buildDropboxAuthUrl,
     computeRetryDelay,
     runUpdateWithRetry,
     flushPendingQueue,
@@ -213,6 +216,51 @@ test('isAllowedMediaUrl', async (t) => {
     await t.test('rejects malformed and relative input', () => {
         assert.equal(isAllowedMediaUrl('not a url'), false);
         assert.equal(isAllowedMediaUrl('/relative/path.png'), false);
+    });
+});
+
+test('isViewerHash', async (t) => {
+    await t.test('matches the viewer hash exactly', () => {
+        assert.equal(isViewerHash(VIEWER_HASH), true);
+        assert.equal(isViewerHash('#tv-viewer'), true);
+    });
+
+    await t.test('does not match #tv or the empty/default hash', () => {
+        assert.equal(isViewerHash('#tv'), false);
+        assert.equal(isViewerHash(''), false);
+        assert.equal(isViewerHash('#tv-viewerish'), false);
+    });
+});
+
+test('buildDropboxAuthUrl', async (t) => {
+    await t.test('builds the base authorize URL with PKCE params and no scope by default', () => {
+        const url = buildDropboxAuthUrl({
+            clientId: 'client123',
+            codeChallenge: 'challenge456',
+            redirectUri: 'https://example.github.io/app/',
+        });
+        assert.match(url, /^https:\/\/www\.dropbox\.com\/oauth2\/authorize\?/);
+        assert.match(url, /client_id=client123/);
+        assert.match(url, /response_type=code/);
+        assert.match(url, /code_challenge=challenge456/);
+        assert.match(url, /code_challenge_method=S256/);
+        assert.match(url, /redirect_uri=https%3A%2F%2Fexample.github.io%2Fapp%2F/);
+        assert.match(url, /token_access_type=offline/);
+        assert.doesNotMatch(url, /[?&]scope=/);
+    });
+
+    await t.test('appends an encoded scope parameter when one is given', () => {
+        const url = buildDropboxAuthUrl({
+            clientId: 'client123',
+            codeChallenge: 'challenge456',
+            redirectUri: 'https://example.github.io/app/',
+            scope: 'account_info.read files.metadata.read files.content.read',
+        });
+        assert.match(
+            url,
+            /scope=account_info\.read%20files\.metadata\.read%20files\.content\.read/,
+            'the scope list should be present and space-encoded',
+        );
     });
 });
 

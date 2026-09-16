@@ -12,6 +12,11 @@ const REDIRECT_URI = isLocalhost
     ? window.location.origin + window.location.pathname
     : 'https://adambeltz2.github.io/Simple-Live-Tally/';
 const FILE_PATH = '/data.json';
+// Requested for the #tv-viewer display-only flow instead of the admin
+// flow's default (whatever scopes are enabled in the Dropbox App Console)
+// — a viewer device only ever reads data.json, so it never asks for
+// files.content.write.
+const VIEWER_SCOPE = 'account_info.read files.metadata.read files.content.read';
 
 // var (not let/const): keeps these as real `window` properties, so
 // app state stays introspectable/settable from outside the script
@@ -122,7 +127,14 @@ function switchMgmtTab(tab) {
 }
 
 function checkViewMode() {
-    const isTvMode = window.location.hash === '#tv';
+    const isViewer = isViewerHash(window.location.hash);
+    const isTvMode = window.location.hash === '#tv' || isViewer;
+    const loginText = document.getElementById('login-text');
+    if (loginText) {
+        loginText.innerText = isViewer
+            ? 'Connect to Dropbox to display this event on this screen (view-only — no data can be added or changed here).'
+            : 'Connect to Dropbox to start tallying votes.';
+    }
     const container = document.getElementById('main-container');
     const header = document.getElementById('main-header');
     const nav = document.getElementById('app-nav');
@@ -208,17 +220,28 @@ async function generateCodeChallenge(codeVerifier) {
 async function startAuthFlow() {
     const codeVerifier = generateRandomString(64);
     window.localStorage.setItem('pkce_verifier', codeVerifier);
+    // Dropbox's redirect back from /oauth2/authorize lands on the plain
+    // REDIRECT_URI with no fragment, so a #tv/#tv-viewer hash the operator
+    // was on gets dropped by that browser navigation. Stash it here and
+    // restore it in handleAuthRedirect() so signing in from a TV/viewer
+    // screen doesn't silently land back on the full admin layout.
+    window.localStorage.setItem('post_auth_hash', window.location.hash);
     const codeChallenge = await generateCodeChallenge(codeVerifier);
-    // token_access_type=offline requests a refresh_token alongside the
-    // short-lived access token, so the app can renew silently instead
-    // of forcing operators to re-authenticate mid-event.
-    window.location.href = `https://www.dropbox.com/oauth2/authorize?client_id=${CLIENT_ID}&response_type=code&code_challenge=${codeChallenge}&code_challenge_method=S256&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&token_access_type=offline`;
+    const scope = isViewerHash(window.location.hash) ? VIEWER_SCOPE : undefined;
+    window.location.href = buildDropboxAuthUrl({
+        clientId: CLIENT_ID,
+        codeChallenge,
+        redirectUri: REDIRECT_URI,
+        scope,
+    });
 }
 async function handleAuthRedirect() {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     if (code) {
-        const newUrl = window.location.pathname + window.location.hash;
+        const restoredHash = window.localStorage.getItem('post_auth_hash') || '';
+        window.localStorage.removeItem('post_auth_hash');
+        const newUrl = window.location.pathname + restoredHash;
         window.history.replaceState({}, document.title, newUrl);
         const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
             method: 'POST',

@@ -40,6 +40,18 @@ Everything for an event — settings, teams, transactions — lives in a single 
 
 ---
 
+## Running the Dashboard on a Second Device
+
+The operator's laptop (running "Add Transaction") and the screen the audience watches don't have to be the same computer. Since all event data already lives in your Dropbox App Folder rather than in the browser, a second device just needs its own read-only connection to the same folder:
+
+1. On the second device (a lobby TV's browser, a spare laptop plugged into a projector, etc.), open this app's URL with `#tv-viewer` appended, e.g. `https://<your-username>.github.io/<repository-name>/#tv-viewer`.
+2. Click **Authenticate with Dropbox** and sign in with the **same Dropbox account** the operator used. This device requests a separate, *read-only* connection (`account_info.read`, `files.metadata.read`, `files.content.read`) — it can never add, edit, or delete anything, even if someone finds their way to this screen's browser.
+3. The screen then behaves exactly like the regular `#tv` display mode — high-contrast, full-bleed, no admin controls — and polls for updates the same way the operator's dashboard does.
+
+Each device signs in independently and keeps its own token in its own browser's local storage, so there's no pairing step and no limit on how many display-only screens you run.
+
+---
+
 ## Features
 
 * **Serverless & Zero Maintenance:** Hosted for free on GitHub Pages with no backend server or database infrastructure required.
@@ -51,6 +63,7 @@ Everything for an event — settings, teams, transactions — lives in a single 
 * **Dynamic Event Goals:** Set financial goals for your events and watch an animated SVG Gauge Chart fill up in real-time. 
 * **Custom Branding & Dark Mode:** Toggle between light and dark themes, upload a custom logo, and inject your own custom title and primary brand colors directly from the UI.
 * **Dedicated TV / Projector Display Mode:** Append `#tv` to the URL to instantly switch to a high-contrast mode with a specifically scaled-down Top 10 leaderboard designed to display on 1080p projectors without scrolling.
+* **Multi-Device Display Mode:** Append `#tv-viewer` to the URL on a second computer to run the same TV display there, signed in independently with its own restricted, read-only Dropbox connection — see [Running the Dashboard on a Second Device](#running-the-dashboard-on-a-second-device) below.
 * **Full Data Management & Factory Resets:** Easily create, edit, or delete Events and Teams. Purge sample data with a single click before going live.
 * **Point-in-Time Backups:** Instantly export your entire database as a timestamped `.zip` package right from the management panel.
 

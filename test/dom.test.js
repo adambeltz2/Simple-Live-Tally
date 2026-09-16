@@ -10,15 +10,20 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { webcrypto } = require('node:crypto');
 const { JSDOM } = require('jsdom');
 
 const HTML_SOURCE = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 const LOGIC_SOURCE = fs.readFileSync(path.join(__dirname, '../js/logic.js'), 'utf8');
 const APP_SOURCE = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
 
-function loadApp() {
-    const dom = new JSDOM(HTML_SOURCE, { runScripts: 'outside-only', url: 'http://localhost/' });
+function loadApp(url) {
+    const dom = new JSDOM(HTML_SOURCE, { runScripts: 'outside-only', url: url || 'http://localhost/' });
     const { window } = dom;
+    // jsdom implements window.crypto.getRandomValues but not .subtle — needed
+    // by generateCodeChallenge() (the PKCE flow) — so borrow Node's real
+    // WebCrypto implementation for it.
+    window.crypto.subtle = webcrypto.subtle;
     // Same order as index.html's <script> tags: js/logic.js, then js/app.js.
     // app.js wires all its event listeners (bindStaticEventListeners) as a
     // top-level statement, so evaluating it here reproduces real page load.
@@ -641,5 +646,98 @@ test('DOM: offline/queued writes', async (t) => {
             /Save failed/,
             'the editor message should reflect the immediate failure, not a queued one',
         );
+    });
+});
+
+test('DOM: multi-device viewer mode (#tv-viewer)', async (t) => {
+    await t.test('checkViewMode() applies the same display-only styling as #tv and swaps the login copy', () => {
+        const window = loadApp();
+        const { document } = window;
+
+        window.location.hash = '#tv-viewer';
+        window.checkViewMode();
+
+        assert.equal(document.getElementById('main-header').classList.contains('hidden'), true);
+        assert.equal(document.getElementById('app-nav').classList.contains('hidden'), true);
+        assert.equal(document.getElementById('admin-controls').classList.contains('hidden'), true);
+        assert.equal(document.getElementById('main-footer').classList.contains('hidden'), true);
+        assert.equal(document.documentElement.classList.contains('dark'), true);
+        assert.match(document.getElementById('login-text').innerText, /view-only/);
+    });
+
+    await t.test('leaving #tv-viewer restores the normal admin layout and login copy', () => {
+        const window = loadApp();
+        const { document } = window;
+
+        window.location.hash = '#tv-viewer';
+        window.checkViewMode();
+        window.location.hash = '';
+        window.checkViewMode();
+
+        assert.equal(document.getElementById('main-header').classList.contains('hidden'), false);
+        assert.equal(document.getElementById('app-nav').classList.contains('hidden'), false);
+        assert.equal(document.getElementById('admin-controls').classList.contains('hidden'), false);
+        assert.equal(document.getElementById('main-footer').classList.contains('hidden'), false);
+        assert.match(document.getElementById('login-text').innerText, /start tallying votes/);
+    });
+
+    await t.test(
+        'startAuthFlow() requests the restricted viewer scope and stashes the hash for the return trip',
+        async () => {
+            const window = loadApp();
+            window.location.hash = '#tv-viewer';
+
+            await window.startAuthFlow();
+
+            assert.ok(window.localStorage.getItem('pkce_verifier'), 'a PKCE code verifier should be stored');
+            assert.equal(window.localStorage.getItem('post_auth_hash'), '#tv-viewer');
+        },
+    );
+
+    await t.test('startAuthFlow() from the normal admin screen stashes an empty hash (no viewer scope)', async () => {
+        const window = loadApp();
+        window.location.hash = '';
+
+        await window.startAuthFlow();
+
+        assert.ok(window.localStorage.getItem('pkce_verifier'));
+        assert.equal(window.localStorage.getItem('post_auth_hash'), '');
+    });
+
+    await t.test('handleAuthRedirect() restores the stashed #tv-viewer hash and applies viewer styling', async () => {
+        // Simulates landing back from Dropbox: the OAuth redirect always
+        // drops the fragment, so the page loads with ?code=... and no hash,
+        // exactly like startAuthFlow() would have left it after stashing
+        // post_auth_hash and navigating away.
+        const window = loadApp('http://localhost/?code=abc123');
+        window.localStorage.setItem('pkce_verifier', 'stub-verifier');
+        window.localStorage.setItem('post_auth_hash', '#tv-viewer');
+        window.fetch = async (url) => {
+            if (String(url).includes('oauth2/token')) {
+                return { ok: true, json: async () => ({ access_token: 'tok123', refresh_token: 'rtok123' }) };
+            }
+            if (String(url).includes('/download')) {
+                return {
+                    ok: true,
+                    status: 200,
+                    headers: { get: () => JSON.stringify({ rev: 'rev1' }) },
+                    json: async () => baseAppData(),
+                };
+            }
+            throw new Error('unexpected fetch URL: ' + url);
+        };
+
+        await window.handleAuthRedirect();
+
+        assert.equal(window.location.hash, '#tv-viewer', 'the viewer hash should be restored after the redirect');
+        assert.equal(window.localStorage.getItem('post_auth_hash'), null, 'the stashed hash should be consumed');
+        assert.equal(window.localStorage.getItem('dropbox_token'), 'tok123');
+        assert.equal(
+            window.document.getElementById('main-header').classList.contains('hidden'),
+            true,
+            'initApp() should have applied viewer/TV styling once the hash was restored',
+        );
+
+        window.close();
     });
 });
