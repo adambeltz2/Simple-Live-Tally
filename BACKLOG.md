@@ -4,9 +4,6 @@ Known follow-ups and enhancements that haven't shipped yet. Anything here
 that gets built moves to `CHANGELOG.md` under its release and is removed
 from this list — this file is only what's still outstanding.
 
-## Feature
-- [ ] Process for allowing the dashboard to be on a different device than the data management. Allowing many computers to log into the same "event" for maximum capabilities
-
 ## Reliability
 
 - [ ] **Bulk JSON editor replaces the whole file, no merge.** Saving

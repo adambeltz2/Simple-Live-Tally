@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.0] - 2026-09-16
+### Added
+- **Multi-device display mode:** The live dashboard no longer has to run on the same computer as data entry. Appending `#tv-viewer` to the URL on a second device shows the same high-contrast `#tv` display, but signs in with its own independent, read-only Dropbox connection (`account_info.read files.metadata.read files.content.read` — no `files.content.write`), so a display-only screen can never add, edit, or delete event data even if its session were compromised. Reuses the exact same `#tv` styling and localStorage keys as the admin flow (`checkViewMode()` in `js/app.js`) — a viewer device is just a separate browser/localStorage context requesting a narrower scope, no new backend or pairing step required.
+### Fixed
+- **OAuth redirect dropped the `#tv`/`#tv-viewer` hash:** Dropbox's `/oauth2/authorize` redirect always lands back on the plain redirect URI with no URL fragment, so signing in while on `#tv` (or the new `#tv-viewer`) silently kicked the page back into the full admin layout after authenticating. `startAuthFlow()` now stashes the current hash in `localStorage` (`post_auth_hash`) before navigating to Dropbox, and `handleAuthRedirect()` restores it once the token exchange completes.
+
 ## [1.18.0] - 2026-09-14
 ### Added
 - **Offline/queued writes:** A save that fails because Dropbox can't be reached, or because a save conflict couldn't be resolved after the usual retries, no longer surfaces an alert and drops the change. It's queued locally instead (`pendingQueue` in `js/app.js`, drained in order by `flushPendingQueue()` in `js/logic.js`) and retried automatically — on the next `online` event, on the existing 60s background refresh tick, or immediately via a new pending-writes indicator button in the header (click to retry now). A stopped-at-the-first-failure design means a write that still can't save, and anything queued behind it, stays queued rather than being silently dropped or applied out of order. The one exception is the bulk "Raw JSON" editor: since it replaces the entire dataset from a snapshot captured at click time, queueing it for a later retry risks silently clobbering intervening changes with stale data, so it keeps the old immediate-alert-on-failure behavior (`updateDataWrapper(fn, { allowQueue: false })`).
