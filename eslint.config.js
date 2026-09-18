@@ -16,13 +16,16 @@ const logicGlobals = {
     isAllowedMediaUrl: 'readonly',
     VIEWER_HASH: 'readonly',
     isViewerHash: 'readonly',
+    KEYER_HASH: 'readonly',
+    isKeyerHash: 'readonly',
     buildDropboxAuthUrl: 'readonly',
     computeRetryDelay: 'readonly',
     runUpdateWithRetry: 'readonly',
     flushPendingQueue: 'readonly',
+    collapseTransactionLedger: 'readonly',
+    computeEditDelta: 'readonly',
+    computeDeleteAmount: 'readonly',
     computeMaxVisibleRows: 'readonly',
-    validateAppDataShape: 'readonly',
-    parseAppDataJson: 'readonly',
 };
 
 module.exports = [

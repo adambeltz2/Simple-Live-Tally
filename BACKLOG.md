@@ -6,12 +6,18 @@ from this list — this file is only what's still outstanding.
 
 ## Reliability
 
-- [ ] **Bulk JSON editor replaces the whole file, no merge.** Saving
-      through the "Raw JSON" tab overwrites the entire stored file, so a
-      concurrent edit made by someone else between opening the editor and
-      hitting Save is silently discarded (no merge, no conflict warning).
-      Acceptable for a power-user bulk-edit tool, but worth calling out in
-      the UI if it becomes a recurring pain point.
+- [ ] **[DEBT] No ledger compaction/archival as an event approaches Dropbox's
+      `download_zip` ceiling.** Every transaction add/edit/delete appends a
+      new file under `/transactions/<eventId>/`; nothing is ever removed.
+      An exceptionally long-running or high-volume event could in theory
+      approach Dropbox's `download_zip` limits (10,000 files / 20GB per
+      folder — see README's [How It Works & Scope](README.md#how-it-works--scope)),
+      at which point `downloadTransactionEntries()` would start failing.
+      Well beyond what a normal live event produces, but worth a compaction
+      strategy (e.g. periodically collapsing old delta chains into a single
+      snapshot entry) if it ever becomes a real constraint. Affected:
+      `js/app.js` (`downloadTransactionEntries`), `js/logic.js`
+      (`collapseTransactionLedger`).
 
 ## Process
 

@@ -34,9 +34,25 @@ Just open that page and sign in with **your own** Dropbox account. Because of th
 
 ## How It Works & Scope
 
-Simple Live Tally is a **single-operator, manual-entry tool**, not an open public voting system. One person (or a small team, all authenticated with the same Dropbox account) runs the "Add Transaction" panel and types in each donation or vote as it comes in; the "Live Dashboard" / TV mode is what the audience watches update in near real time. There's no public-facing submission form — anyone who can add a transaction already has full write access to the event's data.
+Simple Live Tally is a **manual-entry tool**, not an open public voting system. One or more trusted operators (see [Roles](#roles) below) type in each donation or vote as it comes in; the "Live Dashboard" / TV mode is what the audience watches update in near real time. There's no public-facing submission form — anyone who can add a transaction already has write access to the event's data.
 
-Everything for an event — settings, teams, transactions — lives in a single `data.json` file in your Dropbox App Folder. That's plenty for a typical single-event fundraiser or vote count, but it's not built for very high transaction volume or many people editing concurrently: every save re-fetches and re-applies on top of the latest file, so heavy concurrent writes mean more retries, not corruption, but it will feel that friction well before a real database would.
+Event **settings, teams, and events** live in a single `data.json` file in your Dropbox App Folder, the same as before. **Transactions are different**: each one is its own small file under `/transactions/<eventId>/`, written once and never edited or deleted in place. Correcting an amount writes a new *delta* entry (the difference between old and new); removing a transaction writes a new *negation* entry (its amount, negated). The displayed total for a transaction is just the sum of every entry that shares its id — so multiple people can add, correct, or remove transactions from different devices at the same time with **no save conflicts and no retries**, since nobody's write ever collides with anybody else's file. Only the shared `data.json` (settings/teams/events) still uses a fetch-then-save-with-retry cycle, because it's genuinely one file multiple people might touch at once.
+
+This scales to whatever a live event can realistically produce — the practical ceiling is Dropbox's own `download_zip` API limit (10,000 files / 20GB per folder), not a homegrown one.
+
+## Roles
+
+Simple Live Tally has three URL-hash-selected roles, each with its own independent Dropbox sign-in:
+
+| Role | URL | Dropbox access | Can do |
+|---|---|---|---|
+| **Admin** | *(no hash)* | Full read/write | Everything: add/edit/delete transactions, manage teams/events/settings, export the audit trail, factory reset. |
+| **Keyer** | `#keyer` | Full read/write (same as Admin) | A focused "Add Transaction" screen only — no dashboard, no Data Management nav. Meant for a dedicated data-entry station (e.g. a table by the door) run by someone who shouldn't need or see the rest of the admin UI. |
+| **TV Viewer** | `#tv-viewer` | Read-only | The `#tv` display only — can never add, edit, or delete anything, enforced by Dropbox itself via a narrower OAuth scope. |
+
+**Important:** Dropbox's OAuth scopes can't express "write-only, but only under `/transactions/`" — scopes are either read-only or full read-write, with no path-level restriction. So the Keyer role's restricted UI is a **mistake-prevention convenience, not a security boundary**: anyone signed in as `#keyer` has the same underlying Dropbox permissions as an Admin, just a simpler screen. Only the TV Viewer's read-only scope is actually enforced by Dropbox. Don't rely on `#keyer` to keep out someone you wouldn't also trust with full Admin access.
+
+Each Keyer device is prompted once for a short station label (e.g. "Front Table"), stored in that browser's `localStorage` and attached to every transaction it creates — so the exported audit trail shows which station entered what, even though every station shares the same underlying write access.
 
 ---
 
@@ -55,7 +71,8 @@ Each device signs in independently and keeps its own token in its own browser's 
 ## Features
 
 * **Serverless & Zero Maintenance:** Hosted for free on GitHub Pages with no backend server or database infrastructure required.
-* **Dropbox App Folder Integration:** Authenticates securely via OAuth 2.0 PKCE. Data is safely stored in a single `data.json` file inside your Dropbox `/Apps/Simple Live Tally/` folder.
+* **Dropbox App Folder Integration:** Authenticates securely via OAuth 2.0 PKCE. Settings/teams/events live in a single `data.json`; each transaction is its own file under `/transactions/<eventId>/` in your Dropbox `/Apps/Simple Live Tally/` folder — see [How It Works & Scope](#how-it-works--scope).
+* **Conflict-Free Concurrent Data Entry:** Multiple people can add, correct, or remove transactions from different devices at the same time with no save conflicts — every transaction entry is its own file, so writes never collide.
 * **Optimistic UI Zero-Latency Updates:** Submitting transactions updates the live dashboard instantly without network delay, managing data syncs quietly in the background for a perfectly smooth operator experience.
 * **Strict Uniqueness Validation:** Prevents duplicate public team names during creation and modification processes.
 * **Scrolling Top Leaders Ticker:** An animated marquee ticker in the header showcases the top 1-N frontrunners continuously.
@@ -64,8 +81,9 @@ Each device signs in independently and keeps its own token in its own browser's 
 * **Custom Branding & Dark Mode:** Toggle between light and dark themes, upload a custom logo, and inject your own custom title and primary brand colors directly from the UI.
 * **Dedicated TV / Projector Display Mode:** Append `#tv` to the URL to instantly switch to a high-contrast mode with a specifically scaled-down Top 10 leaderboard designed to display on 1080p projectors without scrolling.
 * **Multi-Device Display Mode:** Append `#tv-viewer` to the URL on a second computer to run the same TV display there, signed in independently with its own restricted, read-only Dropbox connection — see [Running the Dashboard on a Second Device](#running-the-dashboard-on-a-second-device) below.
-* **Full Data Management & Factory Resets:** Easily create, edit, or delete Events and Teams. Purge sample data with a single click before going live.
-* **Point-in-Time Backups:** Instantly export your entire database as a timestamped `.zip` package right from the management panel.
+* **Dedicated Keyer Stations:** Append `#keyer` to the URL for a focused, admin-nav-free "Add Transaction" screen for a data-entry station — see [Roles](#roles) above.
+* **Full Data Management & Factory Resets:** Easily create, edit, or delete Events and Teams. Removing an Event or Team from the dashboard only removes it from view — the underlying transaction ledger entries are never deleted, so the full history always survives in the ZIP export.
+* **Full Audit Trail Export:** Instantly export every settings/team/event snapshot and every individual transaction entry (including who entered it and when) as a timestamped `.zip` package right from the management panel.
 
 ---
 
