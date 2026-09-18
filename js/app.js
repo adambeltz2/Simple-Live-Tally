@@ -153,7 +153,7 @@ function checkViewMode() {
         container.classList.replace('max-w-5xl', 'max-w-full');
         container.classList.replace('my-4', 'my-0');
         container.classList.replace('rounded-lg', 'rounded-none');
-        container.classList.add('h-screen', 'p-4', 'sm:p-6');
+        container.classList.add('h-dvh', 'p-4', 'sm:p-6');
 
         header.classList.add('hidden');
         nav.classList.add('hidden');
@@ -177,7 +177,7 @@ function checkViewMode() {
         container.classList.replace('max-w-full', 'max-w-5xl');
         container.classList.replace('my-0', 'my-4');
         container.classList.replace('rounded-none', 'rounded-lg');
-        container.classList.remove('h-screen', 'p-4', 'sm:p-6');
+        container.classList.remove('h-dvh', 'p-4', 'sm:p-6');
 
         header.classList.remove('hidden');
         nav.classList.remove('hidden');

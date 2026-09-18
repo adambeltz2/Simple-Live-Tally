@@ -741,3 +741,56 @@ test('DOM: multi-device viewer mode (#tv-viewer)', async (t) => {
         window.close();
     });
 });
+
+test('DOM: mobile viewport sizing', async (t) => {
+    await t.test('the page uses a dynamic-viewport height, not the static 100vh unit', () => {
+        // 100vh on a mobile browser is measured against the largest possible
+        // viewport (URL bar hidden), so a page sized with h-screen renders
+        // taller than what's actually visible whenever the URL bar is
+        // showing — the classic cause of a nested scroll area feeling stuck
+        // or unresponsive on phones. h-dvh (100dvh) tracks the real visible
+        // viewport instead. Regression guard against re-introducing h-screen.
+        const window = loadApp();
+        const body = window.document.getElementById('body');
+
+        assert.equal(body.classList.contains('h-dvh'), true, 'body should size itself with the dynamic viewport unit');
+        assert.equal(body.classList.contains('h-screen'), false, 'body should not use the static 100vh unit');
+    });
+
+    await t.test('TV mode sizes the container with the same dynamic-viewport unit', () => {
+        const window = loadApp();
+        const { document } = window;
+        const container = document.getElementById('main-container');
+
+        window.location.hash = '#tv';
+        window.checkViewMode();
+        assert.equal(container.classList.contains('h-dvh'), true);
+        assert.equal(container.classList.contains('h-screen'), false);
+
+        window.location.hash = '';
+        window.checkViewMode();
+        assert.equal(container.classList.contains('h-dvh'), false, 'h-dvh should be removed once TV mode is left');
+    });
+
+    await t.test(
+        '#view-management establishes a flex layout so its internal scroll pane is actually height-constrained',
+        () => {
+            // Regression guard for a real bug (not just the h-dvh sizing above):
+            // #view-management only had `flex-col` (no base `flex`/`display:flex`
+            // class), so it always rendered as a plain block box. That silently
+            // broke the flex chain the Settings/Teams/Events/Transactions/JSON
+            // panes rely on for internal scrolling — flex-1/min-h-0 on the
+            // `overflow-y-auto` pane inside it do nothing without a flex parent,
+            // so the pane grew to its full content height instead of being
+            // capped, and anything past main-container's overflow:hidden edge
+            // was simply clipped and unreachable rather than scrollable. #tv
+            // and #view-dashboard both use jsdom's own `.hidden` class, which
+            // needs a `flex` class alongside it to restore display:flex once
+            // unhidden — this asserts #view-management has that too.
+            const window = loadApp();
+            const el = window.document.getElementById('view-management');
+            assert.equal(el.classList.contains('flex'), true);
+            assert.equal(el.classList.contains('flex-col'), true);
+        },
+    );
+});

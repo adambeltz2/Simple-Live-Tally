@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.20.0] - 2026-09-18
+### Fixed
+- **Data Management panes never actually scrolled on mobile — content past the edge was just clipped and unreachable.** `#view-management` was missing the base `flex` class (it only had `flex-col`), so it rendered as a plain block box instead of a flex container. That silently broke the flex chain the Settings/Teams/Events/Transactions/JSON sub-tabs rely on for internal scrolling: `flex-1`/`min-h-0` on the `overflow-y-auto` pane inside it do nothing without a flex parent, so the pane always grew to its full content height instead of being height-capped, and anything past `#main-container`'s `overflow: hidden` edge was simply clipped rather than reachable by scrolling — worse on mobile, where there's no mouse wheel to reveal the problem by accident. Reported as "hard to scroll, sometimes doesn't respond" on the Teams tab.
+- **`100vh` rendered taller than the visible viewport on mobile browsers**, since `vh` is measured against the largest possible viewport (URL bar hidden) rather than what's actually on screen — a second, compounding cause of the same scrolling problem. `body` and the `#tv`/`#tv-viewer` display modes now size themselves with `h-dvh` (`100dvh`, the dynamic viewport unit) instead of `h-screen` (`100vh`), so the layout always matches the real visible viewport as the browser's address bar shows/hides.
+
 ## [1.19.0] - 2026-09-16
 ### Added
 - **Multi-device display mode:** The live dashboard no longer has to run on the same computer as data entry. Appending `#tv-viewer` to the URL on a second device shows the same high-contrast `#tv` display, but signs in with its own independent, read-only Dropbox connection (`account_info.read files.metadata.read files.content.read` — no `files.content.write`), so a display-only screen can never add, edit, or delete event data even if its session were compromised. Reuses the exact same `#tv` styling and localStorage keys as the admin flow (`checkViewMode()` in `js/app.js`) — a viewer device is just a separate browser/localStorage context requesting a narrower scope, no new backend or pairing step required.
