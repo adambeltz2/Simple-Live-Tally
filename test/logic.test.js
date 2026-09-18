@@ -11,14 +11,16 @@ const {
     isAllowedMediaUrl,
     VIEWER_HASH,
     isViewerHash,
+    KEYER_HASH,
+    isKeyerHash,
     buildDropboxAuthUrl,
     computeRetryDelay,
     runUpdateWithRetry,
     flushPendingQueue,
+    collapseTransactionLedger,
+    computeEditDelta,
+    computeDeleteAmount,
     computeMaxVisibleRows,
-    validateAppDataShape,
-    validateAppDataRecords,
-    parseAppDataJson,
 } = require('../js/logic.js');
 
 test('escapeHtml', async (t) => {
@@ -229,6 +231,20 @@ test('isViewerHash', async (t) => {
         assert.equal(isViewerHash('#tv'), false);
         assert.equal(isViewerHash(''), false);
         assert.equal(isViewerHash('#tv-viewerish'), false);
+    });
+});
+
+test('isKeyerHash', async (t) => {
+    await t.test('matches the keyer hash exactly', () => {
+        assert.equal(isKeyerHash(KEYER_HASH), true);
+        assert.equal(isKeyerHash('#keyer'), true);
+    });
+
+    await t.test('does not match #tv, #tv-viewer, or the empty/default hash', () => {
+        assert.equal(isKeyerHash('#tv'), false);
+        assert.equal(isKeyerHash('#tv-viewer'), false);
+        assert.equal(isKeyerHash(''), false);
+        assert.equal(isKeyerHash('#keyerish'), false);
     });
 });
 
@@ -468,146 +484,174 @@ test('computeMaxVisibleRows', async (t) => {
     });
 });
 
-test('validateAppDataShape', async (t) => {
-    const validData = { settings: {}, events: [], entities: [], transactions: [] };
-
-    await t.test('accepts a well-formed appData object', () => {
-        assert.deepEqual(validateAppDataShape(validData), { valid: true });
-    });
-
-    await t.test('rejects a non-object root (array, string, null, number)', () => {
-        assert.equal(validateAppDataShape([]).valid, false);
-        assert.equal(validateAppDataShape('nope').valid, false);
-        assert.equal(validateAppDataShape(null).valid, false);
-        assert.equal(validateAppDataShape(42).valid, false);
-    });
-
-    await t.test('rejects when an array field is missing or the wrong type', () => {
-        for (const field of ['events', 'entities', 'transactions']) {
-            const broken = { ...validData, [field]: 'not-an-array' };
-            const result = validateAppDataShape(broken);
-            assert.equal(result.valid, false);
-            assert.match(result.error, new RegExp(field));
-        }
-    });
-
-    await t.test('rejects a non-object settings field', () => {
-        const broken = { ...validData, settings: [] };
-        assert.equal(validateAppDataShape(broken).valid, false);
-    });
-});
-
-test('validateAppDataRecords', async (t) => {
-    function baseData(overrides) {
-        return Object.assign(
+test('collapseTransactionLedger', async (t) => {
+    await t.test('a plain create entry becomes a row with the same amount', () => {
+        const entries = [
             {
-                settings: { title: 'X', logoUrl: '' },
-                events: [],
-                entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '' }],
-                transactions: [],
+                id: 't1',
+                logicalId: 't1',
+                kind: 'create',
+                entityId: 'e1',
+                eventId: 'evt1',
+                amount: 50,
+                createDate: '2026-01-01T00:00:00.000Z',
+                createdBy: 'Admin',
             },
-            overrides,
+        ];
+        const rows = collapseTransactionLedger(entries);
+        assert.equal(rows.length, 1);
+        assert.equal(rows[0].id, 't1');
+        assert.equal(rows[0].amount, 50);
+        assert.equal(rows[0].entityId, 'e1');
+        assert.equal(rows[0].eventId, 'evt1');
+        assert.equal(rows[0].createdBy, 'Admin');
+    });
+
+    await t.test('an edit delta sums with the create to produce the current amount', () => {
+        const entries = [
+            {
+                id: 't1',
+                logicalId: 't1',
+                kind: 'create',
+                entityId: 'e1',
+                eventId: 'evt1',
+                amount: 50,
+                createDate: '2026-01-01T00:00:00.000Z',
+            },
+            {
+                id: 't2',
+                logicalId: 't1',
+                kind: 'edit',
+                entityId: 'e1',
+                eventId: 'evt1',
+                amount: -20,
+                createDate: '2026-01-01T00:05:00.000Z',
+            },
+        ];
+        const rows = collapseTransactionLedger(entries);
+        assert.equal(rows.length, 1);
+        assert.equal(rows[0].amount, 30, '50 + (-20) delta = 30');
+        assert.equal(
+            rows[0].createDate,
+            '2026-01-01T00:00:00.000Z',
+            'createDate should be the original entry, not the edit',
         );
-    }
-
-    await t.test('accepts well-formed records', () => {
-        assert.deepEqual(validateAppDataRecords(baseData()), { valid: true });
+        assert.equal(rows[0].modifiedDate, '2026-01-01T00:05:00.000Z', 'modifiedDate should be the latest entry');
     });
 
-    await t.test('rejects an invalid settings.logoUrl', () => {
-        const result = validateAppDataRecords(baseData({ settings: { title: 'X', logoUrl: 'javascript:alert(1)' } }));
-        assert.equal(result.valid, false);
-        assert.match(result.error, /logoUrl/);
+    await t.test('a delete entry removes the logical transaction from the results entirely', () => {
+        const entries = [
+            {
+                id: 't1',
+                logicalId: 't1',
+                kind: 'create',
+                entityId: 'e1',
+                eventId: 'evt1',
+                amount: 50,
+                createDate: '2026-01-01T00:00:00.000Z',
+            },
+            {
+                id: 't2',
+                logicalId: 't1',
+                kind: 'delete',
+                entityId: 'e1',
+                eventId: 'evt1',
+                amount: -50,
+                createDate: '2026-01-01T00:05:00.000Z',
+            },
+        ];
+        const rows = collapseTransactionLedger(entries);
+        assert.deepEqual(rows, []);
     });
 
-    await t.test('rejects an entity with a blank namePublic', () => {
-        const result = validateAppDataRecords(baseData({ entities: [{ id: 'e1', namePublic: '  ', imageUrl: '' }] }));
-        assert.equal(result.valid, false);
-        assert.match(result.error, /namePublic/);
+    await t.test('independent logical transactions do not interfere with each other', () => {
+        const entries = [
+            {
+                id: 't1',
+                logicalId: 't1',
+                kind: 'create',
+                entityId: 'e1',
+                eventId: 'evt1',
+                amount: 10,
+                createDate: '2026-01-01T00:00:00.000Z',
+            },
+            {
+                id: 't2',
+                logicalId: 't2',
+                kind: 'create',
+                entityId: 'e2',
+                eventId: 'evt1',
+                amount: 20,
+                createDate: '2026-01-01T00:01:00.000Z',
+            },
+            {
+                id: 't3',
+                logicalId: 't2',
+                kind: 'delete',
+                entityId: 'e2',
+                eventId: 'evt1',
+                amount: -20,
+                createDate: '2026-01-01T00:02:00.000Z',
+            },
+        ];
+        const rows = collapseTransactionLedger(entries);
+        assert.equal(rows.length, 1);
+        assert.equal(rows[0].id, 't1');
     });
 
-    await t.test('rejects duplicate entity names (case/trim-insensitive)', () => {
-        const result = validateAppDataRecords(
-            baseData({
-                entities: [
-                    { id: 'e1', namePublic: 'Team A', imageUrl: '' },
-                    { id: 'e2', namePublic: '  team a  ', imageUrl: '' },
-                ],
-            }),
+    await t.test('sorts rows newest-created-first', () => {
+        const entries = [
+            {
+                id: 'a',
+                logicalId: 'a',
+                kind: 'create',
+                entityId: 'e1',
+                eventId: 'evt1',
+                amount: 1,
+                createDate: '2026-01-01T00:00:00.000Z',
+            },
+            {
+                id: 'b',
+                logicalId: 'b',
+                kind: 'create',
+                entityId: 'e1',
+                eventId: 'evt1',
+                amount: 2,
+                createDate: '2026-01-02T00:00:00.000Z',
+            },
+        ];
+        const rows = collapseTransactionLedger(entries);
+        assert.deepEqual(
+            rows.map((r) => r.id),
+            ['b', 'a'],
         );
-        assert.equal(result.valid, false);
-        assert.match(result.error, /Duplicate entity name/);
     });
 
-    await t.test('rejects an entity with an invalid imageUrl', () => {
-        const result = validateAppDataRecords(
-            baseData({ entities: [{ id: 'e1', namePublic: 'Team A', imageUrl: 'data:text/html,<script>x</script>' }] }),
-        );
-        assert.equal(result.valid, false);
-        assert.match(result.error, /imageUrl/);
-    });
-
-    await t.test('rejects a transaction with a non-positive amount', () => {
-        const result = validateAppDataRecords(
-            baseData({ transactions: [{ id: 't1', entityId: 'e1', eventId: 'evt1', amount: -5 }] }),
-        );
-        assert.equal(result.valid, false);
-        assert.match(result.error, /amount/);
+    await t.test('handles an empty/absent ledger without throwing', () => {
+        assert.deepEqual(collapseTransactionLedger([]), []);
+        assert.deepEqual(collapseTransactionLedger(undefined), []);
     });
 });
 
-test('parseAppDataJson', async (t) => {
-    await t.test('parses and accepts valid, well-formed JSON', () => {
-        const json = JSON.stringify({ settings: { title: 'X' }, events: [], entities: [], transactions: [] });
-        const result = parseAppDataJson(json);
-        assert.equal(result.valid, true);
-        assert.equal(result.data.settings.title, 'X');
+test('computeEditDelta', async (t) => {
+    await t.test('returns the difference needed to reach the new amount', () => {
+        assert.equal(computeEditDelta(50, 30), -20);
+        assert.equal(computeEditDelta(10, 25), 15);
     });
 
-    await t.test('reports a syntax error for malformed JSON without throwing', () => {
-        const result = parseAppDataJson('{ this is not valid json');
-        assert.equal(result.valid, false);
-        assert.match(result.error, /Invalid JSON/);
+    await t.test('is zero when the amount is unchanged', () => {
+        assert.equal(computeEditDelta(40, 40), 0);
+    });
+});
+
+test('computeDeleteAmount', async (t) => {
+    await t.test('returns the negation of the current amount', () => {
+        assert.equal(computeDeleteAmount(50), -50);
+        assert.equal(computeDeleteAmount(0.01), -0.01);
     });
 
-    await t.test('reports a shape error for syntactically valid but wrong-shaped JSON', () => {
-        const result = parseAppDataJson('[1, 2, 3]');
-        assert.equal(result.valid, false);
-        assert.match(result.error, /object/);
-    });
-
-    await t.test('reports a shape error for JSON missing a required array field', () => {
-        const result = parseAppDataJson(JSON.stringify({ settings: {}, entities: [], transactions: [] }));
-        assert.equal(result.valid, false);
-        assert.match(result.error, /events/);
-    });
-
-    await t.test('reports a record-level error for a duplicate entity name, even though the shape is valid', () => {
-        const result = parseAppDataJson(
-            JSON.stringify({
-                settings: {},
-                events: [],
-                entities: [
-                    { id: 'e1', namePublic: 'Team A', imageUrl: '' },
-                    { id: 'e2', namePublic: 'Team A', imageUrl: '' },
-                ],
-                transactions: [],
-            }),
-        );
-        assert.equal(result.valid, false);
-        assert.match(result.error, /Duplicate entity name/);
-    });
-
-    await t.test('reports a record-level error for a bad transaction amount, even though the shape is valid', () => {
-        const result = parseAppDataJson(
-            JSON.stringify({
-                settings: {},
-                events: [],
-                entities: [],
-                transactions: [{ id: 't1', entityId: 'e1', eventId: 'evt1', amount: 0 }],
-            }),
-        );
-        assert.equal(result.valid, false);
-        assert.match(result.error, /amount/);
+    await t.test('summing it back against the current amount always yields exactly 0', () => {
+        const current = 123.45;
+        assert.equal(current + computeDeleteAmount(current), 0);
     });
 });

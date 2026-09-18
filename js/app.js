@@ -12,10 +12,13 @@ const REDIRECT_URI = isLocalhost
     ? window.location.origin + window.location.pathname
     : 'https://adambeltz2.github.io/Simple-Live-Tally/';
 const FILE_PATH = '/data.json';
-// Requested for the #tv-viewer display-only flow instead of the admin
+// Requested for the #tv-viewer display-only flow instead of the admin/keyer
 // flow's default (whatever scopes are enabled in the Dropbox App Console)
-// — a viewer device only ever reads data.json, so it never asks for
-// files.content.write.
+// — a viewer device only ever reads data, so it never asks for
+// files.content.write. #keyer still needs full read-write (it has to
+// create transaction entries) — Dropbox has no scope granular enough to
+// express "write-only, and only under /transactions/", so that role is
+// enforced at the UI layer only; see checkViewMode().
 const VIEWER_SCOPE = 'account_info.read files.metadata.read files.content.read';
 
 // var (not let/const): keeps these as real `window` properties, so
@@ -24,6 +27,20 @@ const VIEWER_SCOPE = 'account_info.read files.metadata.read files.content.read';
 var accessToken = null;
 var currentRev = null;
 var appData = null;
+// The active event's transaction ledger as of the last successful poll —
+// a flat list of create/edit/delete entries (see writeTransactionEntry).
+// Summing every entry's amount for an entity gives its current total
+// directly; no grouping needed for that. See collapseTransactionLedger()
+// (js/logic.js) for the "one row per logical transaction" view the
+// Transactions management pane needs instead.
+var transactionEntries = [];
+// Entries created by this device during this session that a poll hasn't
+// confirmed yet (whether still in flight, queued for retry, or simply
+// created after the last poll ran) — merged in by
+// getVisibleTransactionEntries() so totals/the transactions list don't
+// regress if a poll refresh lands while a write is still pending. Pruned
+// automatically once a poll's fresh transactionEntries includes them.
+var localTransactionEntries = [];
 var refreshTimer = 60;
 var countdownInterval = null;
 var currentMgmtTab = 'settings';
@@ -31,7 +48,10 @@ var isSubmittingTransaction = false;
 // Updates that failed to save because of a network/conflict problem (not an
 // auth failure) wait here instead of being silently discarded — see
 // updateDataWrapper's allowQueue option and flushPendingWrites below.
-// In-memory only: a page reload loses anything still queued.
+// Every item is a bare "attempt" closure — () => Promise<{status, ...}> —
+// whether it's a config save (wraps runUpdateWithRetry) or a single
+// transaction-entry upload, so flushPendingWrites can run any of them the
+// same way. In-memory only: a page reload loses anything still queued.
 var pendingQueue = [];
 var isFlushingQueue = false;
 
@@ -43,7 +63,6 @@ const defaultData = {
         { id: 'ent_1', namePublic: 'Team Alpha', namePrivate: 'Internal Alpha', imageUrl: '', color: 'bg-red-500' },
         { id: 'ent_2', namePublic: 'Team Beta', namePrivate: 'Internal Beta', imageUrl: '', color: 'bg-blue-500' },
     ],
-    transactions: [],
 };
 
 const colors = [
@@ -111,7 +130,7 @@ function switchTab(tab) {
     }
 }
 
-const MGMT_TABS = ['settings', 'entities', 'events', 'transactions', 'json'];
+const MGMT_TABS = ['settings', 'entities', 'events', 'transactions'];
 
 function switchMgmtTab(tab) {
     currentMgmtTab = tab;
@@ -119,21 +138,19 @@ function switchMgmtTab(tab) {
         document.getElementById(`mgmt-view-${t}`).classList.toggle('hidden', t !== tab);
         document.getElementById(`mgmt-tab-${t}`).classList.toggle('active', t === tab);
     });
-    // Populate the editor lazily, and only if it's untouched — never
-    // clobber a draft the operator is mid-edit on just by tab-switching.
-    if (tab === 'json' && !document.getElementById('json-editor').value.trim()) {
-        loadJsonEditor();
-    }
 }
 
 function checkViewMode() {
     const isViewer = isViewerHash(window.location.hash);
     const isTvMode = window.location.hash === '#tv' || isViewer;
+    const isKeyer = isKeyerHash(window.location.hash);
     const loginText = document.getElementById('login-text');
     if (loginText) {
         loginText.innerText = isViewer
             ? 'Connect to Dropbox to display this event on this screen (view-only — no data can be added or changed here).'
-            : 'Connect to Dropbox to start tallying votes.';
+            : isKeyer
+              ? 'Connect to Dropbox to add donations from this station.'
+              : 'Connect to Dropbox to start tallying votes.';
     }
     const container = document.getElementById('main-container');
     const header = document.getElementById('main-header');
@@ -180,8 +197,6 @@ function checkViewMode() {
         container.classList.remove('h-dvh', 'p-4', 'sm:p-6');
 
         header.classList.remove('hidden');
-        nav.classList.remove('hidden');
-        adminControls.classList.remove('hidden');
         footer.classList.remove('hidden');
         leaderboardHeader.classList.replace('border-gray-800', 'border-gray-200');
 
@@ -191,6 +206,22 @@ function checkViewMode() {
 
         countdownDisplay.classList.replace('text-2xl', 'text-sm');
         tvLogo.classList.add('hidden');
+        adminControls.classList.remove('hidden');
+
+        // A keyer station only ever adds donations — Data Management
+        // (Settings/Teams/Events, and every destructive action inside it)
+        // is never reachable from this UI, even though the underlying
+        // Dropbox token is the exact same full read-write grant an admin
+        // has (Dropbox has no way to scope a token to "write-only, and
+        // only under /transactions/"). This is a mistake-prevention
+        // boundary, not a security one — see VIEWER_SCOPE above for the
+        // one role that *is* enforced by Dropbox itself.
+        if (isKeyer) {
+            switchTab('dashboard');
+            nav.classList.add('hidden');
+        } else {
+            nav.classList.remove('hidden');
+        }
     }
 
     if (appData) {
@@ -221,10 +252,11 @@ async function startAuthFlow() {
     const codeVerifier = generateRandomString(64);
     window.localStorage.setItem('pkce_verifier', codeVerifier);
     // Dropbox's redirect back from /oauth2/authorize lands on the plain
-    // REDIRECT_URI with no fragment, so a #tv/#tv-viewer hash the operator
-    // was on gets dropped by that browser navigation. Stash it here and
-    // restore it in handleAuthRedirect() so signing in from a TV/viewer
-    // screen doesn't silently land back on the full admin layout.
+    // REDIRECT_URI with no fragment, so a #tv/#tv-viewer/#keyer hash the
+    // operator was on gets dropped by that browser navigation. Stash it
+    // here and restore it in handleAuthRedirect() so signing in from a
+    // TV/viewer/keyer screen doesn't silently land back on the full admin
+    // layout.
     window.localStorage.setItem('post_auth_hash', window.location.hash);
     const codeChallenge = await generateCodeChallenge(codeVerifier);
     const scope = isViewerHash(window.location.hash) ? VIEWER_SCOPE : undefined;
@@ -314,10 +346,14 @@ function handleAuthFailure() {
     window.location.reload();
 }
 
+// --- CONFIG STORAGE (settings/events/entities — still one shared file
+// multiple devices could legitimately edit at the same instant, so this
+// keeps the fetch -> mutate -> conditional-save -> retry-on-409 cycle). ---
+
 // Does the actual Dropbox fetch and throws on any failure (including
 // a 401, after triggering the re-auth flow). Callers that must not
 // proceed on stale/missing data (e.g. updateDataWrapper) should call
-// this directly inside their own try/catch instead of fetchState(),
+// this directly inside their own try/catch instead of fetchAll(),
 // which swallows errors for the background polling use case.
 async function fetchStateInternal() {
     const response = await dropboxFetch('https://content.dropboxapi.com/2/files/download', () => ({
@@ -345,17 +381,6 @@ async function fetchStateInternal() {
     if (!appData.activeEventId && appData.events.length > 0) appData.activeEventId = appData.events[0].id;
 }
 
-async function fetchState() {
-    try {
-        await fetchStateInternal();
-        applyThemeColor();
-        renderApp();
-        if (!document.getElementById('view-management').classList.contains('hidden')) renderManagement();
-    } catch (error) {
-        console.error('Error fetching state:', error);
-    }
-}
-
 async function saveState() {
     const mode = currentRev ? { '.tag': 'update', update: currentRev } : 'add';
     const response = await dropboxFetch('https://content.dropboxapi.com/2/files/upload', () => ({
@@ -379,8 +404,143 @@ async function saveState() {
     return true;
 }
 
+// --- TRANSACTION LEDGER STORAGE (one file per create/edit/delete entry,
+// under /transactions/<eventId>/<entryId>.json — nothing ever overwrites
+// or deletes another device's entry, so unlike config there is no
+// fetch-before-save/conflict-retry needed for a single entry write). ---
+
+function makeEntryId() {
+    return window.crypto.randomUUID();
+}
+
+// Downloads every entry file for one event's ledger in a single Dropbox
+// API call (files/download_zip on the event's folder) instead of listing
+// the folder and downloading each small file individually — the read cost
+// then stays flat regardless of how many transactions the event has
+// accumulated, up to Dropbox's own download_zip ceiling (folders under
+// 20GB / 10,000 entries), comfortably beyond what a live event produces.
+async function downloadTransactionEntries(eventId) {
+    if (!eventId) return [];
+    const response = await dropboxFetch('https://content.dropboxapi.com/2/files/download_zip', () => ({
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Dropbox-API-Arg': JSON.stringify({ path: `/transactions/${eventId}` }),
+        },
+    }));
+    if (response.status === 401) {
+        handleAuthFailure();
+        throw new Error('Unauthorized');
+    }
+    if (response.status === 409) {
+        // No transactions folder yet for this event (e.g. brand new event,
+        // nobody has added anything yet) — same "doesn't exist yet"
+        // convention Dropbox uses elsewhere in this app; see
+        // fetchStateInternal's 409 handling above.
+        return [];
+    }
+    if (!response.ok) throw new Error('Failed to download transaction entries');
+
+    const blob = await response.blob();
+    const zip = await JSZip.loadAsync(blob);
+    const files = Object.values(zip.files).filter((f) => !f.dir && f.name.endsWith('.json'));
+    return Promise.all(files.map(async (file) => JSON.parse(await file.async('string'))));
+}
+
+async function fetchTransactionEntriesInternal() {
+    transactionEntries = await downloadTransactionEntries(appData.activeEventId);
+    // Anything this device wrote that's now reflected in the fresh poll no
+    // longer needs to be merged in separately.
+    const confirmedIds = new Set(transactionEntries.map((e) => e.id));
+    localTransactionEntries = localTransactionEntries.filter((e) => !confirmedIds.has(e.id));
+}
+
+// The full picture for computing totals / rendering the transactions list:
+// the last poll's confirmed entries, plus anything this device created
+// locally that the last poll hasn't confirmed yet (still in flight, queued
+// for retry, or simply written after that poll ran).
+function getVisibleTransactionEntries() {
+    if (localTransactionEntries.length === 0) return transactionEntries;
+    const confirmedIds = new Set(transactionEntries.map((e) => e.id));
+    return transactionEntries.concat(localTransactionEntries.filter((e) => !confirmedIds.has(e.id)));
+}
+
+async function writeTransactionEntry(entry) {
+    const response = await dropboxFetch('https://content.dropboxapi.com/2/files/upload', () => ({
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/octet-stream',
+            'Dropbox-API-Arg': JSON.stringify({
+                path: `/transactions/${entry.eventId}/${entry.id}.json`,
+                mode: 'add',
+                autorename: false,
+                mute: true,
+            }),
+        },
+        body: JSON.stringify(entry),
+    }));
+    if (response.status === 401) {
+        handleAuthFailure();
+        throw new Error('Unauthorized');
+    }
+    if (!response.ok) throw new Error('Failed to write transaction entry');
+}
+
+// A single, non-queueing attempt to save one entry — used both for the
+// very first try and for every retry from flushPendingWrites. Never
+// re-queues on failure itself; the caller (saveTransactionEntry below, or
+// flushPendingQueue's own "leave it in `remaining`" behavior) owns that.
+async function attemptTransactionEntrySave(entry) {
+    try {
+        await writeTransactionEntry(entry);
+        return { status: 'success' };
+    } catch (error) {
+        return { status: 'fetch-failed', error };
+    }
+}
+
+// Called once, at the moment a transaction/edit/delete entry is created.
+// Tries immediately; on failure, queues a bare retry attempt for
+// flushPendingWrites. The entry was already pushed onto
+// localTransactionEntries by the caller before this runs, so it stays
+// visible in totals/the transactions list either way until a poll confirms
+// it — no separate success/failure bookkeeping needed here for that.
+async function saveTransactionEntry(entry) {
+    const result = await attemptTransactionEntrySave(entry);
+    if (result.status !== 'success') {
+        console.error('Error writing transaction entry, queueing for retry:', result.error);
+        pendingQueue.push(() => attemptTransactionEntrySave(entry));
+        renderPendingIndicator();
+    }
+    return result;
+}
+
+// Loads the config file and the active event's transaction ledger together
+// (the two reads the dashboard needs), swallowing errors for the
+// background polling use case — see fetchStateInternal/
+// fetchTransactionEntriesInternal for the throwing versions callers that
+// must not proceed on stale data use instead.
+async function fetchAll() {
+    try {
+        await fetchStateInternal();
+        await fetchTransactionEntriesInternal();
+        applyThemeColor();
+        renderApp();
+        if (!document.getElementById('view-management').classList.contains('hidden')) renderManagement();
+    } catch (error) {
+        console.error('Error fetching state:', error);
+    }
+}
+
 // --- DATA MANAGEMENT & EXPORT LOGIC ---
 
+// Bundles the config file, every raw transaction-entry file across every
+// event (the complete, unmodified ledger — full audit trail, including
+// entries for events since removed from the dashboard), and a computed
+// summary.json (current totals + collapsed transaction list per event) for
+// convenience, so an operator doesn't have to hand-sum the raw ledger to
+// see where things stood at export time.
 async function exportDataZip() {
     if (!appData) return alert('No data available to export.');
     const now = new Date();
@@ -396,8 +556,30 @@ async function exportDataZip() {
         String(now.getMinutes()).padStart(2, '0') +
         '-' +
         String(now.getSeconds()).padStart(2, '0');
+
     const zip = new JSZip();
     zip.file('data.json', JSON.stringify(appData, null, 2));
+
+    const summary = { generatedAt: now.toISOString(), events: {} };
+    for (const event of appData.events) {
+        let entries;
+        try {
+            entries = await downloadTransactionEntries(event.id);
+        } catch (error) {
+            console.error(`Error exporting transactions for event ${event.id}:`, error);
+            entries = [];
+        }
+        entries.forEach((entry) => {
+            zip.file(`transactions/${event.id}/${entry.id}.json`, JSON.stringify(entry, null, 2));
+        });
+        summary.events[event.id] = {
+            name: event.name,
+            totals: computeTotals(appData.entities, entries, event.id),
+            transactions: collapseTransactionLedger(entries),
+        };
+    }
+    zip.file('summary.json', JSON.stringify(summary, null, 2));
+
     const blob = await zip.generateAsync({ type: 'blob' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -411,13 +593,11 @@ async function exportDataZip() {
 
 const MAX_SAVE_ATTEMPTS = 5;
 
-// options.allowQueue (default true): when a save fails because of the
-// network or a save conflict (not an auth failure), queue updateFn for
-// automatic retry instead of discarding the change. Pass allowQueue:false
-// for operations where a *stale* deferred retry would be actively harmful
-// rather than just delayed — see saveJsonEditor(), which replaces the
-// entire file and would silently clobber intervening changes if re-applied
-// minutes later against a snapshot captured at click time.
+// Drives a config change (Settings/Teams/Events) through the fetch ->
+// mutate -> save -> retry cycle. options.allowQueue (default true): when a
+// save fails because of the network or a save conflict (not an auth
+// failure), queue a fresh attempt for automatic retry instead of
+// discarding the change.
 async function updateDataWrapper(updateFn, options) {
     const allowQueue = !options || options.allowQueue !== false;
     const result = await runUpdateWithRetry({
@@ -437,7 +617,14 @@ async function updateDataWrapper(updateFn, options) {
         console.error('Error saving:', result.error);
     } else if (allowQueue) {
         console.error('Error saving, queueing for retry:', result.error || result.status);
-        pendingQueue.push(updateFn);
+        pendingQueue.push(() =>
+            runUpdateWithRetry({
+                fetchState: fetchStateInternal,
+                updateFn,
+                saveState,
+                maxAttempts: MAX_SAVE_ATTEMPTS,
+            }),
+        );
         renderPendingIndicator();
     } else if (result.status === 'fetch-failed') {
         console.error('Error refreshing state during update:', result.error);
@@ -462,23 +649,18 @@ function renderPendingIndicator() {
     el.classList.remove('hidden');
 }
 
-// Retries queued updates (from prior fetch/save failures) in order, stopping
-// at the first one that still doesn't succeed rather than dropping it or
-// anything queued behind it. Safe to call opportunistically (online event,
-// periodic refresh tick, manual click) since it's a no-op while already
-// running or when the queue is empty.
+// Retries queued attempts (config saves and transaction-entry writes
+// alike — every queue item is already a bare, fully-formed attempt
+// function) in order, stopping at the first one that still doesn't
+// succeed rather than dropping it or anything queued behind it. Safe to
+// call opportunistically (online event, periodic refresh tick, manual
+// click) since it's a no-op while already running or when the queue is
+// empty.
 async function flushPendingWrites() {
     if (isFlushingQueue || pendingQueue.length === 0) return;
     isFlushingQueue = true;
     try {
-        const { succeeded, remaining } = await flushPendingQueue(pendingQueue, (updateFn) =>
-            runUpdateWithRetry({
-                fetchState: fetchStateInternal,
-                updateFn,
-                saveState,
-                maxAttempts: MAX_SAVE_ATTEMPTS,
-            }),
-        );
+        const { succeeded, remaining } = await flushPendingQueue(pendingQueue, (attemptFn) => attemptFn());
         pendingQueue = remaining;
         if (succeeded.length > 0) {
             applyThemeColor();
@@ -512,70 +694,19 @@ async function factoryReset() {
     }
     if (
         confirm(
-            'WARNING: FACTORY RESET.\n\nThis will permanently delete ALL Events, ALL Teams, and ALL Transactions. Only your theme settings will remain.\n\nAre you absolutely sure you want to start fresh?',
+            'WARNING: FACTORY RESET.\n\nThis will remove ALL Events and ALL Teams from the dashboard. Previously recorded transactions remain in the permanent audit ledger (visible via Export) — they are never deleted, just no longer shown. Only your theme settings will remain.\n\nAre you absolutely sure you want to start fresh?',
         )
     ) {
         updateDataWrapper(() => {
             appData.events = [];
             appData.entities = [];
-            appData.transactions = [];
             appData.activeEventId = '';
+        }).then(() => {
+            transactionEntries = [];
+            localTransactionEntries = [];
+            renderApp();
+            renderManagement();
         });
-    }
-}
-
-// Raw JSON bulk editor
-function loadJsonEditor() {
-    document.getElementById('json-editor').value = JSON.stringify(appData, null, 2);
-    document.getElementById('json-editor-message').classList.add('hidden');
-}
-
-function showJsonEditorMessage(text, isSuccess) {
-    const msg = document.getElementById('json-editor-message');
-    msg.textContent = text;
-    msg.className = `text-xs font-medium mb-2 flex-shrink-0 ${isSuccess ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`;
-    msg.classList.remove('hidden');
-}
-
-async function reloadJsonEditor() {
-    if (!confirm('Reload from the server? Any unsaved edits in this editor will be lost.')) return;
-    await fetchState();
-    loadJsonEditor();
-}
-
-async function saveJsonEditor() {
-    const textarea = document.getElementById('json-editor');
-    const result = parseAppDataJson(textarea.value);
-
-    if (!result.valid) {
-        showJsonEditorMessage(result.error, false);
-        return;
-    }
-
-    if (!confirm('This will overwrite the entire saved dataset with the JSON below. Continue?')) return;
-
-    const saveBtn = document.getElementById('json-editor-save-btn');
-    saveBtn.disabled = true;
-    saveBtn.innerText = 'Saving...';
-
-    const updateResult = await updateDataWrapper(
-        () => {
-            appData = result.data;
-            if (!appData.activeEventId && appData.events.length > 0) appData.activeEventId = appData.events[0].id;
-        },
-        { allowQueue: false },
-    );
-
-    saveBtn.disabled = false;
-    saveBtn.innerText = 'Save Changes';
-
-    if (updateResult.status === 'success') {
-        // Reflects the post-save, normalized data; the failure paths
-        // leave the textarea untouched so the operator's draft isn't lost.
-        showJsonEditorMessage('Saved.', true);
-        loadJsonEditor();
-    } else {
-        showJsonEditorMessage('Save failed — see the alert for details. Your edits above are unchanged.', false);
     }
 }
 
@@ -590,6 +721,12 @@ function addEvent() {
         const newId = 'evt_' + Date.now();
         appData.events.push({ id: newId, name, goalAmount, startDate, endDate });
         appData.activeEventId = newId;
+    }).then(async (result) => {
+        if (result.status === 'success') {
+            await fetchTransactionEntriesInternal();
+            renderApp();
+            renderManagement();
+        }
     });
     document.getElementById('new-event-name').value = '';
     document.getElementById('new-event-goal').value = '';
@@ -614,19 +751,24 @@ function editEvent(id) {
 }
 
 async function purgeEvent(id) {
-    if (confirm('Would you like to export a ZIP backup before purging this event and its transactions?')) {
+    if (confirm('Would you like to export a ZIP backup before removing this event?')) {
         await exportDataZip();
     }
     if (
         confirm(
-            'Are you ABSOLUTELY SURE? This will permanently delete the event and ALL associated transactions. This action cannot be undone.',
+            'Are you sure? This removes the event from the dashboard. Its recorded transactions remain in the permanent audit ledger (visible via Export) — they are never deleted.',
         )
     ) {
         updateDataWrapper(() => {
             appData.events = appData.events.filter((e) => e.id !== id);
-            appData.transactions = appData.transactions.filter((t) => t.eventId !== id);
             if (appData.activeEventId === id) {
                 appData.activeEventId = appData.events.length > 0 ? appData.events[0].id : '';
+            }
+        }).then(async (result) => {
+            if (result.status === 'success') {
+                await fetchTransactionEntriesInternal();
+                renderApp();
+                renderManagement();
             }
         });
     }
@@ -685,12 +827,11 @@ function editEntity(id) {
 function purgeEntity(id) {
     if (
         confirm(
-            'Are you sure you want to delete this Team? All transactions for this team will also be permanently deleted.',
+            'Remove this Team from the dashboard? Transactions already recorded for it remain in the permanent audit ledger (visible via Export) but will no longer count toward live totals.',
         )
     ) {
         updateDataWrapper(() => {
             appData.entities = appData.entities.filter((e) => e.id !== id);
-            appData.transactions = appData.transactions.filter((t) => t.entityId !== id);
         });
     }
 }
@@ -700,9 +841,30 @@ async function changeActiveEvent() {
     const select = document.getElementById('active-event-select');
     if (!select) return;
     const newActiveId = select.value;
-    updateDataWrapper(() => {
+    const result = await updateDataWrapper(() => {
         appData.activeEventId = newActiveId;
     });
+    if (result.status === 'success') {
+        await fetchTransactionEntriesInternal();
+        renderApp();
+        renderManagement();
+    }
+}
+
+// Names this device once (persisted in localStorage) so every ledger entry
+// it writes can be attributed to a station — most valuable for #keyer
+// devices, where several volunteers may be entering donations from
+// different tables at once and it's worth being able to tell whose entry
+// is whose in the exported audit trail. Only prompts on a keyer device;
+// the admin flow is assumed to be one known operator and doesn't need one.
+function ensureDeviceLabel() {
+    if (!isKeyerHash(window.location.hash)) return 'Admin';
+    let label = window.localStorage.getItem('device_label');
+    if (!label) {
+        label = window.prompt('Name this station (e.g. "Front Table"):', '') || 'Keyer';
+        window.localStorage.setItem('device_label', label);
+    }
+    return label;
 }
 
 function submitTransaction() {
@@ -720,21 +882,22 @@ function submitTransaction() {
     btn.disabled = true;
     btn.innerText = 'Saving...';
 
-    const newTx = {
-        id: 'txn_' + Date.now(),
-        createDate: new Date().toISOString(),
-        modifiedDate: new Date().toISOString(),
-        entityId: entityId,
+    const entryId = makeEntryId();
+    const newEntry = {
+        id: entryId,
+        logicalId: entryId,
+        kind: 'create',
+        entityId,
         eventId: appData.activeEventId,
-        amount: amount,
+        amount,
+        createDate: new Date().toISOString(),
+        createdBy: ensureDeviceLabel(),
     };
 
-    appData.transactions.push(newTx);
+    localTransactionEntries.push(newEntry);
     renderApp();
 
-    updateDataWrapper(() => {
-        appData.transactions.push(newTx);
-    }).then((result) => {
+    saveTransactionEntry(newEntry).then((result) => {
         isSubmittingTransaction = false;
         btn.disabled = false;
         btn.innerText = 'Submit Vote';
@@ -747,14 +910,9 @@ function submitTransaction() {
                 msg.className = 'hidden';
             }, 3000);
             refreshTimer = 60;
-        } else if (result.status === 'save-failed') {
-            // updateDataWrapper already alerted with the specific reason.
-            msg.textContent = 'Transaction not saved — see the alert above for details.';
-            msg.className = 'text-sm mt-2 text-red-600 block';
         } else {
-            // fetch-failed / conflict-exhausted: updateDataWrapper queued it
-            // for automatic retry rather than alerting — the entry itself
-            // isn't lost, just delayed.
+            // Queued rather than alerted — the entry itself isn't lost
+            // (already visible via localTransactionEntries), just delayed.
             msg.textContent = "Couldn't save right now — queued, will retry automatically.";
             msg.className = 'text-sm mt-2 text-yellow-600 block';
         }
@@ -764,20 +922,50 @@ function submitTransaction() {
 function editTransactionAmount(id) {
     const newAmt = parseFloat(document.getElementById(`tx-amt-${id}`).value);
     if (!isValidTransactionAmount(newAmt)) return alert('Enter a positive amount.');
-    updateDataWrapper(() => {
-        const tx = appData.transactions.find((t) => t.id === id);
-        if (tx) {
-            tx.amount = newAmt;
-            tx.modifiedDate = new Date().toISOString();
-        }
-    });
+
+    const currentEntries = getVisibleTransactionEntries().filter((e) => e.logicalId === id);
+    if (currentEntries.length === 0) return;
+    const currentNet = currentEntries.reduce((sum, e) => sum + e.amount, 0);
+
+    const newEntry = {
+        id: makeEntryId(),
+        logicalId: id,
+        kind: 'edit',
+        entityId: currentEntries[0].entityId,
+        eventId: currentEntries[0].eventId,
+        amount: computeEditDelta(currentNet, newAmt),
+        createDate: new Date().toISOString(),
+        createdBy: ensureDeviceLabel(),
+    };
+
+    localTransactionEntries.push(newEntry);
+    renderApp();
+    renderManagement();
+    saveTransactionEntry(newEntry);
 }
+
 function deleteTransaction(id) {
-    if (confirm('Delete this transaction permanently?')) {
-        updateDataWrapper(() => {
-            appData.transactions = appData.transactions.filter((t) => t.id !== id);
-        });
-    }
+    if (!confirm('Delete this transaction permanently?')) return;
+
+    const currentEntries = getVisibleTransactionEntries().filter((e) => e.logicalId === id);
+    if (currentEntries.length === 0) return;
+    const currentNet = currentEntries.reduce((sum, e) => sum + e.amount, 0);
+
+    const newEntry = {
+        id: makeEntryId(),
+        logicalId: id,
+        kind: 'delete',
+        entityId: currentEntries[0].entityId,
+        eventId: currentEntries[0].eventId,
+        amount: computeDeleteAmount(currentNet),
+        createDate: new Date().toISOString(),
+        createdBy: ensureDeviceLabel(),
+    };
+
+    localTransactionEntries.push(newEntry);
+    renderApp();
+    renderManagement();
+    saveTransactionEntry(newEntry);
 }
 
 // --- RENDER LOGIC ---
@@ -827,7 +1015,7 @@ function renderManagement() {
                     </div>
                     <div class="flex justify-between items-center mt-2 border-t dark:border-gray-700 pt-3">
                         <button data-action="edit-event" data-id="${ev.id}" class="text-xs bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 font-semibold py-1.5 px-4 rounded transition-colors">Save Changes</button>
-                        <button data-action="purge-event" data-id="${ev.id}" class="text-xs bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 font-semibold py-1.5 px-3 rounded transition-colors" title="Delete event and all its transactions">Purge Event</button>
+                        <button data-action="purge-event" data-id="${ev.id}" class="text-xs bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 font-semibold py-1.5 px-3 rounded transition-colors" title="Remove event from the dashboard (transactions stay in the audit ledger)">Remove Event</button>
                     </div>
                 </div>`;
         });
@@ -857,7 +1045,7 @@ function renderManagement() {
                     </div>
                     <div class="flex justify-between items-center mt-1 border-t dark:border-gray-700 pt-3">
                         <button data-action="edit-entity" data-id="${ent.id}" class="text-xs bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 font-semibold py-1.5 px-4 rounded transition-colors">Save Changes</button>
-                        <button data-action="purge-entity" data-id="${ent.id}" class="text-xs bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 font-semibold py-1.5 px-3 rounded transition-colors" title="Delete team and its transactions">Delete Team</button>
+                        <button data-action="purge-entity" data-id="${ent.id}" class="text-xs bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 font-semibold py-1.5 px-3 rounded transition-colors" title="Remove team from the dashboard (transactions stay in the audit ledger)">Remove Team</button>
                     </div>
                 </div>`;
         });
@@ -868,9 +1056,9 @@ function renderManagement() {
     if (appData.events.length === 0) {
         txList.innerHTML = '<p class="text-sm text-gray-500 p-2 italic">No active event available.</p>';
     } else {
-        const activeTx = appData.transactions
-            .filter((t) => t.eventId === appData.activeEventId)
-            .sort((a, b) => new Date(b.createDate) - new Date(a.createDate));
+        const activeTx = collapseTransactionLedger(getVisibleTransactionEntries()).filter(
+            (t) => t.eventId === appData.activeEventId,
+        );
         if (activeTx.length === 0) {
             txList.innerHTML = '<p class="text-sm text-gray-500 p-2 italic">No transactions for this event yet.</p>';
         } else {
@@ -888,7 +1076,7 @@ function renderManagement() {
                     <div class="flex items-center justify-between p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors border-b dark:border-gray-700 last:border-0">
                         <div class="flex flex-col">
                             <span class="text-sm font-semibold">${escapeHtml(entName)}</span>
-                            <span class="text-xs text-gray-500">${dt}</span>
+                            <span class="text-xs text-gray-500">${dt}${tx.createdBy ? ` · ${escapeHtml(tx.createdBy)}` : ''}</span>
                         </div>
                         <div class="flex items-center gap-2">
                             <span class="text-sm font-medium opacity-50">$</span>
@@ -975,7 +1163,7 @@ function renderApp() {
         entitySelect.appendChild(opt);
     });
 
-    const totals = computeTotals(appData.entities, appData.transactions, appData.activeEventId);
+    const totals = computeTotals(appData.entities, getVisibleTransactionEntries(), appData.activeEventId);
     const sortedEntities = sortEntitiesByTotal(appData.entities, totals);
     const maxTotal = Math.max(...Object.values(totals), 10);
 
@@ -1030,7 +1218,7 @@ function renderApp() {
             <div class="relative ${gaugeSize}">
                 <svg viewBox="0 0 100 50" class="overflow-visible w-full h-full">
                     <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="${bgStroke}" stroke-width="10" stroke-linecap="round"></path>
-                    <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="${fgStroke}" stroke-width="10" stroke-linecap="round" 
+                    <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="${fgStroke}" stroke-width="10" stroke-linecap="round"
                           stroke-dasharray="${dashArray}" stroke-dashoffset="${dashOffset}" class="transition-all duration-1000 ease-out"></path>
                 </svg>
                 <div class="absolute bottom-0 left-0 right-0 text-center flex flex-col translate-y-2">
@@ -1130,14 +1318,14 @@ function initApp() {
         document.getElementById('app-section').classList.replace('hidden', 'flex');
         document.getElementById('status').innerText = 'Connected';
 
-        fetchState();
+        fetchAll();
 
         setInterval(() => {
             refreshTimer--;
             document.getElementById('countdown').innerText = `Refreshing in ${refreshTimer}s...`;
             if (refreshTimer <= 0) {
                 document.getElementById('countdown').innerText = 'Refreshing now...';
-                fetchState();
+                fetchAll();
                 flushPendingWrites();
                 refreshTimer = 60;
             }
@@ -1173,8 +1361,6 @@ function bindStaticEventListeners() {
     document.getElementById('factory-reset-btn').addEventListener('click', factoryReset);
     document.getElementById('add-entity-btn').addEventListener('click', addEntity);
     document.getElementById('add-event-btn').addEventListener('click', addEvent);
-    document.getElementById('json-reload-btn').addEventListener('click', reloadJsonEditor);
-    document.getElementById('json-editor-save-btn').addEventListener('click', saveJsonEditor);
 
     document.getElementById('admin-view-link').addEventListener('click', (event) => {
         event.preventDefault();

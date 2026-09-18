@@ -5,13 +5,14 @@
 // logic.test.js (which only covers the DOM-free pure functions) by checking
 // the wiring: that index.html/js/app.js actually call them correctly, that
 // escaping survives all the way to rendered markup, and that the sub-tab /
-// JSON editor UI behaves as expected.
+// transaction-ledger UI behaves as expected.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { webcrypto } = require('node:crypto');
 const { JSDOM } = require('jsdom');
+const JSZipNode = require('jszip');
 
 const HTML_SOURCE = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 const LOGIC_SOURCE = fs.readFileSync(path.join(__dirname, '../js/logic.js'), 'utf8');
@@ -24,6 +25,18 @@ function loadApp(url) {
     // by generateCodeChallenge() (the PKCE flow) — so borrow Node's real
     // WebCrypto implementation for it.
     window.crypto.subtle = webcrypto.subtle;
+    // index.html loads JSZip from a CDN <script> tag in a real browser;
+    // jsdom never executes that tag, so provide the same library here (the
+    // npm package, same version pinned in index.html) as the global app.js
+    // expects.
+    window.JSZip = JSZipNode;
+    // jsdom doesn't implement the Object URL APIs exportDataZip() uses to
+    // trigger a download. Tests that call exportDataZip() override
+    // createObjectURL themselves to capture the generated blob; this no-op
+    // default just keeps every other test from throwing if a code path
+    // happens to touch it.
+    window.URL.createObjectURL = () => 'blob:mock';
+    window.URL.revokeObjectURL = () => {};
     // Same order as index.html's <script> tags: js/logic.js, then js/app.js.
     // app.js wires all its event listeners (bindStaticEventListeners) as a
     // top-level statement, so evaluating it here reproduces real page load.
@@ -39,10 +52,76 @@ function baseAppData(overrides) {
             events: [{ id: 'evt1', name: 'Main', goalAmount: null, startDate: '', endDate: '' }],
             activeEventId: 'evt1',
             entities: [],
-            transactions: [],
         },
         overrides,
     );
+}
+
+// A transaction ledger entry — see js/logic.js's collapseTransactionLedger
+// for how create/edit/delete entries combine into "current" transactions.
+function baseEntry(overrides) {
+    return Object.assign(
+        {
+            id: 't1',
+            logicalId: 't1',
+            kind: 'create',
+            entityId: 'e1',
+            eventId: 'evt1',
+            amount: 10,
+            createDate: new Date().toISOString(),
+            createdBy: 'Admin',
+        },
+        overrides,
+    );
+}
+
+// Builds a real zip (via the same JSZip library the app uses) containing one
+// file per entry, matching what files/download_zip returns for a
+// transactions folder — one <id>.json file per entry.
+async function buildZipBuffer(entries) {
+    const zip = new JSZipNode();
+    entries.forEach((entry) => zip.file(`${entry.id}.json`, JSON.stringify(entry)));
+    return zip.generateAsync({ type: 'nodebuffer' });
+}
+
+// A window.fetch mock covering every Dropbox endpoint the app calls:
+//   - files/download (config)          -> returns `config`
+//   - files/download_zip (ledger)      -> returns a real zip of `entries`
+//   - files/upload under /transactions -> recorded into `entryUploads`
+//   - files/upload elsewhere (config)  -> succeeds with a bumped rev
+// `entryUploads` is populated in place (pass an array, inspect it after)
+// so callers don't have to thread a return value through.
+function mockDropboxFetch({ config = baseAppData(), entries = [], entryUploads = [] } = {}) {
+    return async (url, opts) => {
+        const urlStr = String(url);
+        if (urlStr.includes('/files/download_zip')) {
+            const buffer = await buildZipBuffer(entries);
+            return { ok: true, status: 200, blob: async () => buffer };
+        }
+        if (urlStr.includes('/files/download')) {
+            return {
+                ok: true,
+                status: 200,
+                headers: { get: () => JSON.stringify({ rev: 'rev1' }) },
+                json: async () => config,
+            };
+        }
+        if (urlStr.includes('/files/upload')) {
+            const arg = JSON.parse(opts.headers['Dropbox-API-Arg']);
+            if (arg.path.startsWith('/transactions/')) {
+                entryUploads.push({ path: arg.path, body: JSON.parse(opts.body) });
+            }
+            return { ok: true, status: 200, json: async () => ({ rev: 'rev-next' }) };
+        }
+        throw new Error('unexpected fetch URL: ' + urlStr);
+    };
+}
+
+// Lets the app's own async chains (updateDataWrapper/saveTransactionEntry ->
+// the mocked fetch) settle before assertions, since submitTransaction() and
+// friends fire their save without the caller awaiting it.
+function flushAsync() {
+    return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 test('DOM: top-level and management sub-tab navigation', async (t) => {
@@ -65,7 +144,7 @@ test('DOM: top-level and management sub-tab navigation', async (t) => {
         window.switchTab('management');
         window.switchMgmtTab('events');
 
-        ['settings', 'entities', 'events', 'transactions', 'json'].forEach((tab) => {
+        ['settings', 'entities', 'events', 'transactions'].forEach((tab) => {
             const pane = document.getElementById(`mgmt-view-${tab}`);
             const btn = document.getElementById(`mgmt-tab-${tab}`);
             assert.equal(pane.classList.contains('hidden'), tab !== 'events', `pane ${tab} hidden state`);
@@ -76,9 +155,9 @@ test('DOM: top-level and management sub-tab navigation', async (t) => {
     await t.test('switching tabs never leaves more than one pane visible', () => {
         const window = loadApp();
         window.switchTab('management');
-        ['settings', 'entities', 'events', 'transactions', 'json', 'settings'].forEach((tab) => {
+        ['settings', 'entities', 'events', 'transactions', 'settings'].forEach((tab) => {
             window.switchMgmtTab(tab);
-            const visible = ['settings', 'entities', 'events', 'transactions', 'json'].filter(
+            const visible = ['settings', 'entities', 'events', 'transactions'].filter(
                 (t) => !window.document.getElementById(`mgmt-view-${t}`).classList.contains('hidden'),
             );
             assert.deepEqual(visible, [tab]);
@@ -94,25 +173,11 @@ test('DOM: dashboard rendering', async (t) => {
                 { id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' },
                 { id: 'e2', namePublic: 'Team B', namePrivate: '', imageUrl: '', color: 'bg-blue-500' },
             ],
-            transactions: [
-                {
-                    id: 't1',
-                    entityId: 'e1',
-                    eventId: 'evt1',
-                    amount: 50,
-                    createDate: new Date().toISOString(),
-                    modifiedDate: new Date().toISOString(),
-                },
-                {
-                    id: 't2',
-                    entityId: 'e1',
-                    eventId: 'evt1',
-                    amount: 25,
-                    createDate: new Date().toISOString(),
-                    modifiedDate: new Date().toISOString(),
-                },
-            ],
         });
+        window.transactionEntries = [
+            baseEntry({ id: 't1', logicalId: 't1', entityId: 'e1', eventId: 'evt1', amount: 50 }),
+            baseEntry({ id: 't2', logicalId: 't2', entityId: 'e1', eventId: 'evt1', amount: 25 }),
+        ];
 
         window.renderApp();
 
@@ -209,129 +274,6 @@ test('DOM: dashboard rendering', async (t) => {
     });
 });
 
-test('DOM: bulk JSON editor', async (t) => {
-    await t.test('opening the Raw JSON tab populates the textarea from current appData', () => {
-        const window = loadApp();
-        window.appData = baseAppData({ settings: { title: 'Demo Title', logoUrl: '', themeColor: 'bg-blue-600' } });
-        window.switchTab('management');
-        window.switchMgmtTab('json');
-
-        const parsed = JSON.parse(window.document.getElementById('json-editor').value);
-        assert.equal(parsed.settings.title, 'Demo Title');
-    });
-
-    await t.test('re-entering the tab does not clobber an in-progress, unsaved draft', () => {
-        const window = loadApp();
-        window.appData = baseAppData();
-        window.switchTab('management');
-        window.switchMgmtTab('json');
-
-        const textarea = window.document.getElementById('json-editor');
-        textarea.value = '{ "draft": true, unfinished editing...';
-
-        window.switchMgmtTab('settings');
-        window.switchMgmtTab('json');
-
-        assert.equal(textarea.value, '{ "draft": true, unfinished editing...');
-    });
-
-    await t.test('invalid JSON is rejected with a clear message and appData is untouched', async () => {
-        const window = loadApp();
-        const original = baseAppData({ settings: { title: 'Untouched', logoUrl: '', themeColor: 'bg-blue-600' } });
-        window.appData = original;
-        window.switchTab('management');
-        window.switchMgmtTab('json');
-        window.document.getElementById('json-editor').value = '{ this is not valid json';
-
-        await window.saveJsonEditor();
-
-        const msg = window.document.getElementById('json-editor-message');
-        assert.equal(msg.classList.contains('hidden'), false);
-        assert.match(msg.textContent, /Invalid JSON/);
-        assert.equal(window.appData, original, 'appData must be untouched on validation failure');
-    });
-
-    await t.test('wrong-shaped JSON (missing a required field) is rejected', async () => {
-        const window = loadApp();
-        window.appData = baseAppData();
-        window.switchTab('management');
-        window.switchMgmtTab('json');
-        window.document.getElementById('json-editor').value = JSON.stringify({
-            settings: {},
-            entities: [],
-            transactions: [],
-        });
-
-        await window.saveJsonEditor();
-
-        assert.match(window.document.getElementById('json-editor-message').textContent, /events/);
-    });
-
-    await t.test(
-        'record-level problems (duplicate name, bad URL, bad amount) are rejected without ever attempting to save',
-        async () => {
-            const window = loadApp();
-            const original = baseAppData();
-            window.appData = original;
-            window.fetch = async () => {
-                throw new Error('fetch should not be called when record-level validation fails');
-            };
-            window.switchTab('management');
-            window.switchMgmtTab('json');
-            window.document.getElementById('json-editor').value = JSON.stringify({
-                settings: {},
-                events: [],
-                entities: [
-                    { id: 'e1', namePublic: 'Team A', imageUrl: '' },
-                    { id: 'e2', namePublic: 'Team A', imageUrl: '' },
-                ],
-                transactions: [],
-            });
-
-            await window.saveJsonEditor();
-
-            assert.match(window.document.getElementById('json-editor-message').textContent, /Duplicate entity name/);
-            assert.equal(window.appData, original, 'appData must be untouched on validation failure');
-        },
-    );
-
-    await t.test('valid JSON is saved through the real fetch/save pipeline', async () => {
-        const window = loadApp();
-        window.appData = baseAppData();
-        window.accessToken = 'fake-token';
-        window.currentRev = 'rev1';
-        window.confirm = () => true;
-
-        const uploadedBodies = [];
-        window.fetch = async (url, opts) => {
-            if (String(url).includes('/download')) {
-                return {
-                    ok: true,
-                    status: 200,
-                    headers: { get: () => JSON.stringify({ rev: 'rev2' }) },
-                    json: async () => baseAppData(),
-                };
-            }
-            if (String(url).includes('/upload')) {
-                uploadedBodies.push(JSON.parse(opts.body));
-                return { ok: true, status: 200, json: async () => ({ rev: 'rev3' }) };
-            }
-            throw new Error('unexpected fetch URL: ' + url);
-        };
-
-        window.switchTab('management');
-        window.switchMgmtTab('json');
-        const newData = baseAppData({ settings: { title: 'New Title', logoUrl: '', themeColor: 'bg-blue-600' } });
-        window.document.getElementById('json-editor').value = JSON.stringify(newData);
-
-        await window.saveJsonEditor();
-
-        assert.equal(uploadedBodies.length, 1, 'saveState should have uploaded exactly once');
-        assert.equal(uploadedBodies[0].settings.title, 'New Title');
-        assert.equal(window.document.getElementById('json-editor-message').textContent, 'Saved.');
-    });
-});
-
 test('DOM: input validation', async (t) => {
     await t.test('submitTransaction rejects a non-positive amount without attempting to save', () => {
         const window = loadApp();
@@ -349,7 +291,7 @@ test('DOM: input validation', async (t) => {
 
         const msg = window.document.getElementById('entry-message');
         assert.match(msg.textContent, /positive amount/);
-        assert.equal(window.appData.transactions.length, 0, 'no transaction should be recorded locally');
+        assert.equal(window.localTransactionEntries.length, 0, 'no transaction entry should be recorded locally');
     });
 
     await t.test('addEntity rejects a non-http(s) image URL and never attempts to save', () => {
@@ -518,15 +460,103 @@ test('DOM: event wiring (addEventListener / delegation, not direct calls)', asyn
     });
 });
 
-// Lets the app's own async chains (updateDataWrapper -> runUpdateWithRetry
-// -> the mocked fetch) settle before assertions, since submitTransaction()
-// fires updateDataWrapper without the caller awaiting it.
-function flushAsync() {
-    return new Promise((resolve) => setTimeout(resolve, 0));
-}
+test('DOM: transaction ledger (create/edit/delete as immutable entries)', async (t) => {
+    await t.test('submitTransaction writes a single create entry to the right path', async () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.accessToken = 'fake-token';
+        window.renderApp();
 
-test('DOM: offline/queued writes', async (t) => {
-    await t.test('a network failure queues the change instead of alerting', async () => {
+        const uploads = [];
+        window.fetch = mockDropboxFetch({ entryUploads: uploads });
+
+        window.document.getElementById('entity-select').value = 'e1';
+        window.document.getElementById('amount-input').value = '25';
+        window.submitTransaction();
+        await flushAsync();
+
+        assert.equal(uploads.length, 1);
+        assert.equal(uploads[0].path, `/transactions/evt1/${uploads[0].body.id}.json`);
+        assert.equal(uploads[0].body.kind, 'create');
+        assert.equal(uploads[0].body.amount, 25);
+        assert.equal(uploads[0].body.logicalId, uploads[0].body.id, 'a create entry is its own logicalId');
+    });
+
+    await t.test('editTransactionAmount writes a delta entry, not an overwrite', async () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.accessToken = 'fake-token';
+        window.transactionEntries = [baseEntry({ id: 't1', logicalId: 't1', amount: 50 })];
+        window.switchTab('management');
+        window.switchMgmtTab('transactions');
+
+        const uploads = [];
+        window.fetch = mockDropboxFetch({ entryUploads: uploads });
+
+        window.document.getElementById('tx-amt-t1').value = '30';
+        window.editTransactionAmount('t1');
+        await flushAsync();
+
+        assert.equal(uploads.length, 1);
+        assert.equal(uploads[0].body.kind, 'edit');
+        assert.equal(uploads[0].body.logicalId, 't1');
+        assert.equal(uploads[0].body.amount, -20, '50 -> 30 is a -20 delta');
+    });
+
+    await t.test('deleteTransaction writes a negation entry and the transaction disappears from the list', async () => {
+        const window = loadApp();
+        window.confirm = () => true;
+        window.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.accessToken = 'fake-token';
+        window.transactionEntries = [baseEntry({ id: 't1', logicalId: 't1', amount: 50 })];
+        window.switchTab('management');
+        window.switchMgmtTab('transactions');
+        assert.ok(window.document.getElementById('tx-amt-t1'), 'sanity check: the transaction should render first');
+
+        const uploads = [];
+        window.fetch = mockDropboxFetch({ entryUploads: uploads });
+
+        window.deleteTransaction('t1');
+        await flushAsync();
+
+        assert.equal(uploads.length, 1);
+        assert.equal(uploads[0].body.kind, 'delete');
+        assert.equal(uploads[0].body.amount, -50);
+        assert.equal(
+            window.document.getElementById('tx-amt-t1'),
+            null,
+            'the deleted transaction should no longer render',
+        );
+    });
+
+    await t.test('renderManagement shows the collapsed current amount, not raw ledger entries', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.transactionEntries = [
+            baseEntry({ id: 't1', logicalId: 't1', kind: 'create', amount: 50 }),
+            baseEntry({ id: 't2', logicalId: 't1', kind: 'edit', amount: -20 }),
+        ];
+        window.switchTab('management');
+        window.switchMgmtTab('transactions');
+
+        const list = window.document.getElementById('transactions-list');
+        assert.equal(
+            list.querySelectorAll('[id^="tx-amt-"]').length,
+            1,
+            'one row per logical transaction, not per raw entry',
+        );
+        assert.equal(window.document.getElementById('tx-amt-t1').value, '30');
+    });
+
+    await t.test('a network failure while writing an entry queues it instead of dropping it', async () => {
         const window = loadApp();
         window.appData = baseAppData({
             entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
@@ -546,6 +576,7 @@ test('DOM: offline/queued writes', async (t) => {
 
         assert.equal(alertCalled, false, 'a queueable failure must not alert');
         assert.equal(window.pendingQueue.length, 1);
+        assert.equal(window.localTransactionEntries.length, 1, 'the entry stays visible locally while queued');
         assert.match(window.document.getElementById('entry-message').textContent, /queued/);
 
         const indicator = window.document.getElementById('pending-writes-indicator');
@@ -553,7 +584,7 @@ test('DOM: offline/queued writes', async (t) => {
         assert.match(indicator.textContent, /1 pending/);
     });
 
-    await t.test('flushPendingWrites drains the queue once saves succeed again', async () => {
+    await t.test('flushPendingWrites drains a queued entry once saves succeed again', async () => {
         const window = loadApp();
         window.appData = baseAppData({
             entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
@@ -568,21 +599,13 @@ test('DOM: offline/queued writes', async (t) => {
         await flushAsync();
         assert.equal(window.pendingQueue.length, 1, 'sanity check: the write should be queued first');
 
-        window.fetch = async (url) => {
-            if (String(url).includes('/download')) {
-                return {
-                    ok: true,
-                    status: 200,
-                    headers: { get: () => JSON.stringify({ rev: 'rev2' }) },
-                    json: async () => baseAppData(),
-                };
-            }
-            return { ok: true, status: 200, json: async () => ({ rev: 'rev3' }) };
-        };
+        const uploads = [];
+        window.fetch = mockDropboxFetch({ entryUploads: uploads });
 
         await window.flushPendingWrites();
 
         assert.equal(window.pendingQueue.length, 0, 'the queue should drain once saves succeed');
+        assert.equal(uploads.length, 1, 'the retried entry should have actually been uploaded');
         assert.equal(
             window.document.getElementById('pending-writes-indicator').classList.contains('hidden'),
             true,
@@ -590,62 +613,114 @@ test('DOM: offline/queued writes', async (t) => {
         );
     });
 
-    await t.test('clicking the pending-writes indicator triggers a flush', async () => {
+    await t.test('getVisibleTransactionEntries merges locally-created entries a poll has not confirmed yet', () => {
+        const window = loadApp();
+        window.transactionEntries = [baseEntry({ id: 't1', logicalId: 't1', amount: 10 })];
+        window.localTransactionEntries = [
+            baseEntry({ id: 't1', logicalId: 't1', amount: 10 }), // already confirmed — must not double-count
+            baseEntry({ id: 't2', logicalId: 't2', amount: 5 }), // not yet confirmed — must still show
+        ];
+
+        const visible = window.getVisibleTransactionEntries();
+
+        assert.equal(visible.length, 2);
+        assert.deepEqual(visible.map((e) => e.id).sort(), ['t1', 't2']);
+    });
+});
+
+test('DOM: fetching config and the transaction ledger together', async (t) => {
+    await t.test("fetchAll loads config and the active event's ledger in one pass", async () => {
+        const window = loadApp();
+        window.accessToken = 'fake-token';
+        window.fetch = mockDropboxFetch({
+            config: baseAppData({
+                entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+            }),
+            entries: [baseEntry({ id: 't1', logicalId: 't1', amount: 40 })],
+        });
+
+        await window.fetchAll();
+
+        assert.equal(window.appData.settings.title, 'Test Event');
+        assert.equal(window.transactionEntries.length, 1);
+        assert.equal(window.transactionEntries[0].id, 't1');
+    });
+
+    await t.test('a poll confirming a locally-created entry prunes it from localTransactionEntries', async () => {
+        const window = loadApp();
+        window.accessToken = 'fake-token';
+        window.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        const entry = baseEntry({ id: 't1', logicalId: 't1', amount: 10 });
+        window.localTransactionEntries = [entry];
+        window.fetch = mockDropboxFetch({ config: window.appData, entries: [entry] });
+
+        await window.fetchTransactionEntriesInternal();
+
+        assert.equal(window.transactionEntries.length, 1);
+        assert.equal(window.localTransactionEntries.length, 0, 'now confirmed by the poll, no longer needed locally');
+    });
+
+    await t.test("changeActiveEvent re-fetches the newly active event's ledger", async () => {
+        const window = loadApp();
+        window.accessToken = 'fake-token';
+        window.appData = baseAppData({
+            events: [
+                { id: 'evt1', name: 'First', goalAmount: null, startDate: '', endDate: '' },
+                { id: 'evt2', name: 'Second', goalAmount: null, startDate: '', endDate: '' },
+            ],
+            activeEventId: 'evt1',
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.renderApp();
+
+        window.fetch = mockDropboxFetch({
+            config: window.appData,
+            entries: [baseEntry({ id: 't9', logicalId: 't9', eventId: 'evt2', amount: 77 })],
+        });
+
+        const select = window.document.getElementById('active-event-select');
+        select.value = 'evt2';
+        await window.changeActiveEvent();
+
+        assert.equal(window.transactionEntries.length, 1);
+        assert.equal(window.transactionEntries[0].eventId, 'evt2');
+    });
+});
+
+test('DOM: export (full audit trail)', async (t) => {
+    await t.test('exportDataZip bundles the config file, every raw entry, and a computed summary', async () => {
         const window = loadApp();
         window.appData = baseAppData({
             entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
         });
         window.accessToken = 'fake-token';
-        window.renderApp();
-        window.fetch = async () => ({ ok: false, status: 500 });
-        window.document.getElementById('entity-select').value = 'e1';
-        window.document.getElementById('amount-input').value = '10';
-        window.submitTransaction();
-        await flushAsync();
-        assert.equal(window.pendingQueue.length, 1);
 
-        window.fetch = async (url) => {
-            if (String(url).includes('/download')) {
-                return {
-                    ok: true,
-                    status: 200,
-                    headers: { get: () => JSON.stringify({ rev: 'rev2' }) },
-                    json: async () => baseAppData(),
-                };
-            }
-            return { ok: true, status: 200, json: async () => ({ rev: 'rev3' }) };
+        const entries = [baseEntry({ id: 't1', logicalId: 't1', kind: 'create', amount: 50 })];
+        window.fetch = mockDropboxFetch({ entries });
+
+        let capturedBlob = null;
+        window.URL.createObjectURL = (blob) => {
+            capturedBlob = blob;
+            return 'blob:mock';
         };
 
-        window.document.getElementById('pending-writes-indicator').click();
-        await flushAsync();
+        await window.exportDataZip();
 
-        assert.equal(window.pendingQueue.length, 0, 'the click should have drained the queue');
-    });
+        assert.ok(capturedBlob, 'a blob should have been created for download');
+        const zip = await JSZipNode.loadAsync(await capturedBlob.arrayBuffer());
 
-    await t.test('the bulk JSON editor opts out of queueing and keeps the immediate-alert behavior', async () => {
-        const window = loadApp();
-        window.appData = baseAppData();
-        window.accessToken = 'fake-token';
-        window.confirm = () => true;
-        let alertCalled = false;
-        window.alert = () => {
-            alertCalled = true;
-        };
-        window.fetch = async () => ({ ok: false, status: 500 });
+        const config = JSON.parse(await zip.file('data.json').async('string'));
+        assert.equal(config.settings.title, 'Test Event');
 
-        window.switchTab('management');
-        window.switchMgmtTab('json');
-        window.document.getElementById('json-editor').value = JSON.stringify(baseAppData());
+        const entryFile = zip.file('transactions/evt1/t1.json');
+        assert.ok(entryFile, 'the raw entry file should be present under its own path');
+        assert.equal(JSON.parse(await entryFile.async('string')).amount, 50);
 
-        await window.saveJsonEditor();
-
-        assert.equal(window.pendingQueue.length, 0, 'the JSON editor must never queue a stale full-file snapshot');
-        assert.equal(alertCalled, true, 'a fetch failure on the JSON editor must still alert immediately');
-        assert.match(
-            window.document.getElementById('json-editor-message').textContent,
-            /Save failed/,
-            'the editor message should reflect the immediate failure, not a queued one',
-        );
+        const summary = JSON.parse(await zip.file('summary.json').async('string'));
+        assert.equal(summary.events.evt1.totals.e1, 50);
+        assert.equal(summary.events.evt1.transactions.length, 1);
     });
 });
 
@@ -716,6 +791,9 @@ test('DOM: multi-device viewer mode (#tv-viewer)', async (t) => {
             if (String(url).includes('oauth2/token')) {
                 return { ok: true, json: async () => ({ access_token: 'tok123', refresh_token: 'rtok123' }) };
             }
+            if (String(url).includes('/files/download_zip')) {
+                return { ok: true, status: 200, blob: async () => buildZipBuffer([]) };
+            }
             if (String(url).includes('/download')) {
                 return {
                     ok: true,
@@ -739,6 +817,107 @@ test('DOM: multi-device viewer mode (#tv-viewer)', async (t) => {
         );
 
         window.close();
+    });
+});
+
+test('DOM: keyer mode (#keyer)', async (t) => {
+    await t.test('checkViewMode() shows Add Transaction but hides the nav (no route to Data Management)', () => {
+        const window = loadApp();
+        const { document } = window;
+        window.location.hash = '#keyer';
+        window.checkViewMode();
+
+        assert.equal(document.getElementById('app-nav').classList.contains('hidden'), true);
+        assert.equal(document.getElementById('admin-controls').classList.contains('hidden'), false);
+        assert.equal(
+            document.getElementById('main-header').classList.contains('hidden'),
+            false,
+            'keyer keeps the normal admin header/footer, unlike TV mode',
+        );
+        assert.equal(document.getElementById('view-dashboard').classList.contains('hidden'), false);
+        assert.match(document.getElementById('login-text').innerText, /add donations from this station/);
+    });
+
+    await t.test('leaving #keyer restores the nav', () => {
+        const window = loadApp();
+        const { document } = window;
+        window.location.hash = '#keyer';
+        window.checkViewMode();
+        window.location.hash = '';
+        window.checkViewMode();
+        assert.equal(document.getElementById('app-nav').classList.contains('hidden'), false);
+    });
+
+    await t.test(
+        'startAuthFlow() from #keyer stashes the hash and does not request the restricted viewer scope',
+        async () => {
+            const window = loadApp();
+            window.location.hash = '#keyer';
+
+            await window.startAuthFlow();
+
+            assert.equal(window.localStorage.getItem('post_auth_hash'), '#keyer');
+            // A keyer needs to write, so it must not go through the same
+            // restricted-scope branch #tv-viewer uses — isViewerHash('#keyer')
+            // is false (see the isViewerHash unit tests in logic.test.js), so
+            // startAuthFlow() falls through to the default (undefined) scope,
+            // same as the admin flow.
+        },
+    );
+
+    await t.test(
+        'ensureDeviceLabel() prompts once on a keyer device and stamps its answer on new entries',
+        async () => {
+            const window = loadApp();
+            window.location.hash = '#keyer';
+            window.checkViewMode();
+            window.appData = baseAppData({
+                entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+            });
+            window.accessToken = 'fake-token';
+            window.renderApp();
+
+            let promptCalls = 0;
+            window.prompt = () => {
+                promptCalls++;
+                return 'Front Table';
+            };
+            window.fetch = mockDropboxFetch({});
+
+            window.document.getElementById('entity-select').value = 'e1';
+            window.document.getElementById('amount-input').value = '10';
+            window.submitTransaction();
+            await flushAsync();
+
+            assert.equal(promptCalls, 1);
+            assert.equal(window.localStorage.getItem('device_label'), 'Front Table');
+            assert.equal(window.localTransactionEntries[0].createdBy, 'Front Table');
+
+            window.document.getElementById('amount-input').value = '5';
+            window.submitTransaction();
+            await flushAsync();
+            assert.equal(promptCalls, 1, 'should not prompt a second time once a label is stored for this device');
+        },
+    );
+
+    await t.test('the admin flow never prompts and stamps entries with "Admin"', async () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.accessToken = 'fake-token';
+        window.renderApp();
+        window.prompt = () => {
+            throw new Error('must not prompt on the admin flow');
+        };
+        window.fetch = mockDropboxFetch({});
+
+        window.document.getElementById('entity-select').value = 'e1';
+        window.document.getElementById('amount-input').value = '10';
+        window.submitTransaction();
+        await flushAsync();
+
+        assert.equal(window.localTransactionEntries[0].createdBy, 'Admin');
     });
 });
 
@@ -778,8 +957,8 @@ test('DOM: mobile viewport sizing', async (t) => {
             // Regression guard for a real bug (not just the h-dvh sizing above):
             // #view-management only had `flex-col` (no base `flex`/`display:flex`
             // class), so it always rendered as a plain block box. That silently
-            // broke the flex chain the Settings/Teams/Events/Transactions/JSON
-            // panes rely on for internal scrolling — flex-1/min-h-0 on the
+            // broke the flex chain the Settings/Teams/Events/Transactions panes
+            // rely on for internal scrolling — flex-1/min-h-0 on the
             // `overflow-y-auto` pane inside it do nothing without a flex parent,
             // so the pane grew to its full content height instead of being
             // capped, and anything past main-container's overflow:hidden edge
