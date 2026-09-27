@@ -18,7 +18,7 @@ Just open that page and sign in with **your own** Dropbox account. Because of th
 
 ## Screenshots
 
-**Live Dashboard** — the leaderboard operators and guests watch update in real time, with an animated goal gauge and per-team progress bars.
+**Live Dashboard** — the leaderboard operators and guests watch update in real time, with an animated goal gauge and a large, tabular-numeral team ranking built to be read at a glance.
 
 ![Live Dashboard showing a leaderboard of five teams with a fundraising goal gauge](docs/screenshots/dashboard.png)
 
@@ -68,6 +68,18 @@ Each device signs in independently and keeps its own token in its own browser's 
 
 ---
 
+## Reading the Leaderboard at Any Size
+
+The team ranking is a typographic ticker — a rank number, the team name with a small color tick, and a large tabular-numeral dollar amount — rather than a bar chart, so it stays legible whether an event has 3 teams or 30. It renders in one of three density tiers, picked automatically from the team count:
+
+* **Up to 6 teams** — a single column of full-size rows.
+* **7–12 teams** — two columns of the same full-size rows, so the numbers stay just as large.
+* **13+ teams** — the top 5 stay full-size ("spotlight"); everyone else moves into a denser, wrapping grid below ("Also competing"). Nobody is ever hidden behind a "+N more" note — every team is always on screen somewhere.
+
+The Live Dashboard's field grid (13+ teams) simply grows and scrolls, since the operator is sitting right at that screen. The TV display never scrolls: once a roster is large enough that its field grid wouldn't fit one screen at a legible size, it instead pages through the field in batches, auto-advancing every few seconds with a small dot indicator showing how many pages there are — so a 30-team event still shows everyone, just not all at the exact same instant.
+
+---
+
 ## Features
 
 * **Serverless & Zero Maintenance:** Hosted for free on GitHub Pages with no backend server or database infrastructure required.
@@ -76,10 +88,10 @@ Each device signs in independently and keeps its own token in its own browser's 
 * **Optimistic UI Zero-Latency Updates:** Submitting transactions updates the live dashboard instantly without network delay, managing data syncs quietly in the background for a perfectly smooth operator experience.
 * **Strict Uniqueness Validation:** Prevents duplicate public team names during creation and modification processes.
 * **Scrolling Top Leaders Ticker:** An animated marquee ticker in the header showcases the top 1-N frontrunners continuously.
-* **Live Dashboard & Leaderboard:** Automatically polls Dropbox every 60 seconds to update totals, re-sort leaders dynamically, and render smooth progress bars with absolute text positioning to prevent layout clipping.
+* **Live Dashboard & Leaderboard:** Automatically polls Dropbox every 60 seconds to update totals and re-sort leaders dynamically. The ranking itself is a distance-legible ticker, not a bar chart: big tabular numbers and a small per-team color tick, laid out in three density tiers so it scales from a handful of teams up to dozens without ever shrinking below legible or hiding anyone behind a "+N more" note — see [Reading the Leaderboard at Any Size](#reading-the-leaderboard-at-any-size) below.
 * **Dynamic Event Goals:** Set financial goals for your events and watch an animated SVG Gauge Chart fill up in real-time. 
 * **Custom Branding & Dark Mode:** Toggle between light and dark themes, upload a custom logo, and inject your own custom title and primary brand colors directly from the UI.
-* **Dedicated TV / Projector Display Mode:** Append `#tv` to the URL to instantly switch to a high-contrast mode with a specifically scaled-down Top 10 leaderboard designed to display on 1080p projectors without scrolling.
+* **Dedicated TV / Projector Display Mode:** Append `#tv` to the URL to instantly switch to a high-contrast mode built for 1080p projectors — it never scrolls; a large roster pages through itself automatically instead.
 * **Multi-Device Display Mode:** Append `#tv-viewer` to the URL on a second computer to run the same TV display there, signed in independently with its own restricted, read-only Dropbox connection — see [Running the Dashboard on a Second Device](#running-the-dashboard-on-a-second-device) below.
 * **Dedicated Keyer Stations:** Append `#keyer` to the URL for a focused, admin-nav-free "Add Transaction" screen for a data-entry station — see [Roles](#roles) above.
 * **Full Data Management & Factory Resets:** Easily create, edit, or delete Events and Teams. Removing an Event or Team from the dashboard only removes it from view — the underlying transaction ledger entries are never deleted, so the full history always survives in the ZIP export.

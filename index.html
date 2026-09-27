@@ -122,12 +122,13 @@
                     
                     <div id="goal-gauge-container" class="flex-shrink-0 w-full flex justify-center mb-4 transition-all"></div>
 
-                    <!-- Leaderboard: sized to fit without scrolling; entries beyond
-                         what fits are summarized by #leaderboard-overflow below. -->
-                    <div id="leaderboard" class="space-y-3 flex-1 min-h-0 overflow-hidden pb-1">
-                        <!-- Progress bars injected here -->
+                    <!-- Leaderboard: the tiered "Minimal Ticker" layout (see
+                         renderApp() in js/app.js) — the TV display never scrolls
+                         (paginates instead once there's more than fits legibly),
+                         the dashboard scrolls if the roster is large. -->
+                    <div id="leaderboard" class="flex-1 min-h-0 overflow-hidden pb-1">
+                        <!-- Ticker rows injected here -->
                     </div>
-                    <div id="leaderboard-overflow" class="flex-shrink-0 text-center text-xs text-gray-400 dark:text-gray-500 italic pt-2 hidden"></div>
                 </div>
             </div>
 
@@ -227,7 +228,7 @@
 
     <!-- Footer -->
     <footer id="main-footer" class="flex-shrink-0 text-center text-sm text-gray-500 py-4 mt-auto">
-        <p class="font-medium">Simple Live Tally <span class="font-bold">v2.0.0</span></p>
+        <p class="font-medium">Simple Live Tally <span class="font-bold">v2.1.0</span></p>
         <p class="mt-1 space-x-2">
             <a href="https://github.com/adambeltz2/Simple-Live-Tally" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">GitHub</a>
             <span>|</span>

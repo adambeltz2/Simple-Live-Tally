@@ -272,6 +272,100 @@ test('DOM: dashboard rendering', async (t) => {
             'the name should render as visible text, not markup',
         );
     });
+
+    // Builds `count` entities (Team 0, Team 1, ...) each with one transaction
+    // entry, amounts descending so sort order is predictable (Team 0 is
+    // always the leader).
+    function makeRoster(count) {
+        const entities = Array.from({ length: count }, (_, i) => ({
+            id: `e${i}`,
+            namePublic: `Team ${i}`,
+            namePrivate: '',
+            imageUrl: '',
+            color: 'bg-blue-500',
+        }));
+        const entries = entities.map((e, i) =>
+            baseEntry({ id: `t${i}`, logicalId: `t${i}`, entityId: e.id, amount: 1000 - i }),
+        );
+        return { entities, entries };
+    }
+
+    await t.test('a roster past TICKER_HERO_MAX switches to the twin-column tier', () => {
+        const window = loadApp();
+        const { entities, entries } = makeRoster(9);
+        window.appData = baseAppData({ entities });
+        window.transactionEntries = entries;
+
+        window.renderApp();
+
+        const board = window.document.getElementById('leaderboard');
+        assert.match(board.innerHTML, /columns-2/, 'twin tier wraps rows in a two-column container');
+        entities.forEach((e) => assert.match(board.textContent, new RegExp(e.namePublic)));
+    });
+
+    await t.test(
+        'a roster past TICKER_TWIN_MAX keeps the top 5 as a spotlight and moves the rest to a field grid',
+        () => {
+            const window = loadApp();
+            const { entities, entries } = makeRoster(16);
+            window.appData = baseAppData({ entities });
+            window.transactionEntries = entries;
+
+            window.renderApp();
+
+            const board = window.document.getElementById('leaderboard');
+            assert.match(board.textContent, /Also competing — 11 more/, 'field count is everyone past the top 5');
+            // Every single team must still appear somewhere — nobody is hidden
+            // behind a "+N more" note the way the old bar-list capped things.
+            entities.forEach((e) => assert.match(board.textContent, new RegExp(e.namePublic)));
+            assert.equal(
+                window.document.getElementById('leaderboard-overflow'),
+                null,
+                'the old "+N more not shown" element was removed along with the bar-list truncation it supported',
+            );
+        },
+    );
+
+    await t.test('the dashboard field grid shows every team at once, even well past a TV page size', () => {
+        const window = loadApp();
+        const { entities, entries } = makeRoster(30);
+        window.appData = baseAppData({ entities });
+        window.transactionEntries = entries;
+
+        window.renderApp();
+
+        const board = window.document.getElementById('leaderboard');
+        const grid = board.querySelector('.grid');
+        assert.equal(grid.children.length, 25, 'dashboard never paginates — all 25 field teams render at once');
+        // 5 spotlight rows + 1 "Also competing" label + 1 field grid, and
+        // nothing else — no page-indicator dots outside the TV display.
+        assert.equal(board.children.length, 7);
+    });
+
+    await t.test('the TV display pages a large field grid instead of shrinking or scrolling', () => {
+        const window = loadApp('http://localhost/#tv');
+        const { entities, entries } = makeRoster(30);
+        window.appData = baseAppData({ entities });
+        window.transactionEntries = entries;
+        window.tvFieldPage = 0;
+
+        window.renderApp();
+
+        let board = window.document.getElementById('leaderboard');
+        let grid = board.querySelector('.grid');
+        assert.equal(grid.children.length, 18, 'first page shows a full TICKER_TV_FIELD_PAGE_SIZE page');
+        assert.match(board.textContent, /Team 5\b/, 'first field page starts right after the spotlight (rank 6)');
+        assert.doesNotMatch(board.textContent, /Team 25\b/, 'the second page is not shown yet');
+
+        window.tvFieldPage = 1;
+        window.renderApp();
+
+        board = window.document.getElementById('leaderboard');
+        grid = board.querySelector('.grid');
+        assert.equal(grid.children.length, 7, 'second page holds the remaining 25 - 18 = 7 teams');
+        assert.match(board.textContent, /Team 29\b/, 'the last team is reachable on the second page');
+        assert.doesNotMatch(board.textContent, /Team 5\b/, 'the first page is no longer shown');
+    });
 });
 
 test('DOM: input validation', async (t) => {

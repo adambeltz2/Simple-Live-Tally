@@ -4,7 +4,6 @@ const {
     escapeHtml,
     computeTotals,
     sortEntitiesByTotal,
-    computeBarPercentage,
     computeGaugeGeometry,
     isDuplicateName,
     isValidTransactionAmount,
@@ -20,7 +19,11 @@ const {
     collapseTransactionLedger,
     computeEditDelta,
     computeDeleteAmount,
-    computeMaxVisibleRows,
+    TICKER_HERO_MAX,
+    TICKER_TWIN_MAX,
+    TICKER_TV_FIELD_PAGE_SIZE,
+    pickTickerTier,
+    paginate,
 } = require('../js/logic.js');
 
 test('escapeHtml', async (t) => {
@@ -112,21 +115,6 @@ test('sortEntitiesByTotal', async (t) => {
         const entities = [{ id: 'a' }, { id: 'b' }];
         const sorted = sortEntitiesByTotal(entities, {});
         assert.equal(sorted.length, 2);
-    });
-});
-
-test('computeBarPercentage', async (t) => {
-    await t.test('computes a normal percentage', () => {
-        assert.equal(computeBarPercentage(25, 100), 25);
-    });
-
-    await t.test('clamps above 100', () => {
-        assert.equal(computeBarPercentage(150, 100), 100);
-    });
-
-    await t.test('returns 0 when maxTotal is 0 or falsy (no divide-by-zero NaN)', () => {
-        assert.equal(computeBarPercentage(10, 0), 0);
-        assert.equal(computeBarPercentage(10, null), 0);
     });
 });
 
@@ -460,27 +448,52 @@ test('flushPendingQueue', async (t) => {
     });
 });
 
-test('computeMaxVisibleRows', async (t) => {
-    await t.test('computes how many whole rows fit including inter-row gaps', () => {
-        // 5 rows of 80px + 12px gaps fit exactly in 5*80 + 4*12 = 448px
-        assert.equal(computeMaxVisibleRows(448, 80, 12), 5);
+test('pickTickerTier', async (t) => {
+    await t.test('a roster at or under TICKER_HERO_MAX gets the single-column hero tier', () => {
+        assert.equal(pickTickerTier(0), 'hero');
+        assert.equal(pickTickerTier(1), 'hero');
+        assert.equal(pickTickerTier(TICKER_HERO_MAX), 'hero');
     });
 
-    await t.test('floors to the last row that fully fits, never a partial row', () => {
-        assert.equal(computeMaxVisibleRows(447, 80, 12), 4);
+    await t.test('just past TICKER_HERO_MAX switches to the twin-column tier', () => {
+        assert.equal(pickTickerTier(TICKER_HERO_MAX + 1), 'twin');
+        assert.equal(pickTickerTier(TICKER_TWIN_MAX), 'twin');
     });
 
-    await t.test('always shows at least 1 row even if nothing fits', () => {
-        assert.equal(computeMaxVisibleRows(10, 80, 12), 1);
+    await t.test('past TICKER_TWIN_MAX switches to the spotlight+field tier', () => {
+        assert.equal(pickTickerTier(TICKER_TWIN_MAX + 1), 'spotlight');
+        assert.equal(pickTickerTier(50), 'spotlight');
+    });
+});
+
+test('paginate', async (t) => {
+    await t.test('splits a list into consecutive pages of the given size', () => {
+        assert.deepEqual(paginate([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
     });
 
-    await t.test('falls back to unlimited (Infinity) when row height cannot be measured', () => {
-        assert.equal(computeMaxVisibleRows(500, 0, 12), Infinity);
-        assert.equal(computeMaxVisibleRows(500, -5, 12), Infinity);
+    await t.test('a list no longer than the page size is a single page', () => {
+        assert.deepEqual(paginate([1, 2, 3], 10), [[1, 2, 3]]);
     });
 
-    await t.test('treats a missing gap as 0', () => {
-        assert.equal(computeMaxVisibleRows(400, 100), 4);
+    await t.test('an empty list produces no pages', () => {
+        assert.deepEqual(paginate([], 5), []);
+    });
+
+    await t.test('a non-positive or missing page size falls back to one page with everything', () => {
+        assert.deepEqual(paginate([1, 2, 3], 0), [[1, 2, 3]]);
+        assert.deepEqual(paginate([1, 2, 3], -1), [[1, 2, 3]]);
+        assert.deepEqual(paginate([1, 2, 3]), [[1, 2, 3]]);
+    });
+
+    await t.test('every item across all pages preserves the original order', () => {
+        const list = Array.from({ length: 45 }, (_, i) => i);
+        const pages = paginate(list, TICKER_TV_FIELD_PAGE_SIZE);
+        assert.deepEqual(pages.flat(), list);
+        assert.equal(pages.length, 3);
+        assert.deepEqual(
+            pages.map((p) => p.length),
+            [18, 18, 9],
+        );
     });
 });
 

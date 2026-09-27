@@ -9,7 +9,6 @@ const logicGlobals = {
     escapeHtml: 'readonly',
     computeTotals: 'readonly',
     sortEntitiesByTotal: 'readonly',
-    computeBarPercentage: 'readonly',
     computeGaugeGeometry: 'readonly',
     isDuplicateName: 'readonly',
     isValidTransactionAmount: 'readonly',
@@ -25,7 +24,12 @@ const logicGlobals = {
     collapseTransactionLedger: 'readonly',
     computeEditDelta: 'readonly',
     computeDeleteAmount: 'readonly',
-    computeMaxVisibleRows: 'readonly',
+    TICKER_HERO_MAX: 'readonly',
+    TICKER_TWIN_MAX: 'readonly',
+    TICKER_SPOTLIGHT_SIZE: 'readonly',
+    TICKER_TV_FIELD_PAGE_SIZE: 'readonly',
+    pickTickerTier: 'readonly',
+    paginate: 'readonly',
 };
 
 module.exports = [
