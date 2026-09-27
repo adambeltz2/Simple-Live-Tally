@@ -16,6 +16,7 @@ const JSZipNode = require('jszip');
 
 const HTML_SOURCE = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 const LOGIC_SOURCE = fs.readFileSync(path.join(__dirname, '../js/logic.js'), 'utf8');
+const DROPBOX_PROVIDER_SOURCE = fs.readFileSync(path.join(__dirname, '../js/providers/dropbox.js'), 'utf8');
 const APP_SOURCE = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
 
 function loadApp(url) {
@@ -37,10 +38,12 @@ function loadApp(url) {
     // happens to touch it.
     window.URL.createObjectURL = () => 'blob:mock';
     window.URL.revokeObjectURL = () => {};
-    // Same order as index.html's <script> tags: js/logic.js, then js/app.js.
-    // app.js wires all its event listeners (bindStaticEventListeners) as a
-    // top-level statement, so evaluating it here reproduces real page load.
+    // Same order as index.html's <script> tags: js/logic.js, then the active
+    // storage provider, then js/app.js. app.js wires all its event listeners
+    // (bindStaticEventListeners) as a top-level statement, so evaluating it
+    // here reproduces real page load.
     window.eval(LOGIC_SOURCE);
+    window.eval(DROPBOX_PROVIDER_SOURCE);
     window.eval(APP_SOURCE);
     return window;
 }

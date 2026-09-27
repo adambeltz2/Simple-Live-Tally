@@ -12,14 +12,13 @@ const REDIRECT_URI = isLocalhost
     ? window.location.origin + window.location.pathname
     : 'https://adambeltz2.github.io/Simple-Live-Tally/';
 const FILE_PATH = '/data.json';
-// Requested for the #tv-viewer display-only flow instead of the admin/keyer
-// flow's default (whatever scopes are enabled in the Dropbox App Console)
-// — a viewer device only ever reads data, so it never asks for
-// files.content.write. #keyer still needs full read-write (it has to
-// create transaction entries) — Dropbox has no scope granular enough to
-// express "write-only, and only under /transactions/", so that role is
-// enforced at the UI layer only; see checkViewMode().
-const VIEWER_SCOPE = 'account_info.read files.metadata.read files.content.read';
+// The active storage backend. Every provider-specific detail (endpoints,
+// request/response shapes, the meaning of a 409) lives behind this object's
+// interface — see js/providers/dropbox.js for what it implements and why
+// that boundary is drawn where it is. Hardcoded today since Dropbox is the
+// only provider; a future settings-time picker would just assign a
+// different provider object here instead of changing anything below.
+const storageProvider = DropboxProvider;
 
 // var (not let/const): keeps these as real `window` properties, so
 // app state stays introspectable/settable from outside the script
@@ -221,8 +220,8 @@ function checkViewMode() {
         // Dropbox token is the exact same full read-write grant an admin
         // has (Dropbox has no way to scope a token to "write-only, and
         // only under /transactions/"). This is a mistake-prevention
-        // boundary, not a security one — see VIEWER_SCOPE above for the
-        // one role that *is* enforced by Dropbox itself.
+        // boundary, not a security one — see storageProvider.viewerScope
+        // above for the one role that *is* enforced by Dropbox itself.
         if (isKeyer) {
             switchTab('dashboard');
             nav.classList.add('hidden');
@@ -266,8 +265,8 @@ async function startAuthFlow() {
     // layout.
     window.localStorage.setItem('post_auth_hash', window.location.hash);
     const codeChallenge = await generateCodeChallenge(codeVerifier);
-    const scope = isViewerHash(window.location.hash) ? VIEWER_SCOPE : undefined;
-    window.location.href = buildDropboxAuthUrl({
+    const scope = isViewerHash(window.location.hash) ? storageProvider.viewerScope : undefined;
+    window.location.href = storageProvider.getAuthUrl({
         clientId: CLIENT_ID,
         codeChallenge,
         redirectUri: REDIRECT_URI,
@@ -282,21 +281,15 @@ async function handleAuthRedirect() {
         window.localStorage.removeItem('post_auth_hash');
         const newUrl = window.location.pathname + restoredHash;
         window.history.replaceState({}, document.title, newUrl);
-        const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                client_id: CLIENT_ID,
-                grant_type: 'authorization_code',
-                code: code,
-                redirect_uri: REDIRECT_URI,
-                code_verifier: window.localStorage.getItem('pkce_verifier'),
-            }),
+        const result = await storageProvider.exchangeCodeForToken({
+            clientId: CLIENT_ID,
+            code,
+            redirectUri: REDIRECT_URI,
+            codeVerifier: window.localStorage.getItem('pkce_verifier'),
         });
-        const data = await response.json();
-        if (data.access_token) {
-            window.localStorage.setItem('dropbox_token', data.access_token);
-            if (data.refresh_token) window.localStorage.setItem('dropbox_refresh_token', data.refresh_token);
+        if (result) {
+            window.localStorage.setItem('dropbox_token', result.accessToken);
+            if (result.refreshToken) window.localStorage.setItem('dropbox_refresh_token', result.refreshToken);
             initApp();
         }
     }
@@ -310,19 +303,9 @@ async function refreshAccessToken() {
     const refreshToken = window.localStorage.getItem('dropbox_refresh_token');
     if (!refreshToken) return false;
     try {
-        const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                client_id: CLIENT_ID,
-                grant_type: 'refresh_token',
-                refresh_token: refreshToken,
-            }),
-        });
-        if (!response.ok) return false;
-        const data = await response.json();
-        if (!data.access_token) return false;
-        accessToken = data.access_token;
+        const result = await storageProvider.refreshAccessToken({ clientId: CLIENT_ID, refreshToken });
+        if (!result) return false;
+        accessToken = result.accessToken;
         window.localStorage.setItem('dropbox_token', accessToken);
         return true;
     } catch (error) {
@@ -331,11 +314,11 @@ async function refreshAccessToken() {
     }
 }
 
-// Runs a Dropbox API request; on a 401 it attempts one silent token
-// refresh and retries once before giving up. buildOptions is a
+// Runs a storage-provider API request; on a 401 it attempts one silent
+// token refresh and retries once before giving up. buildOptions is a
 // function (not a plain object) so the retry picks up the refreshed
 // accessToken rather than replaying the stale Authorization header.
-async function dropboxFetch(url, buildOptions) {
+async function authFetch(url, buildOptions) {
     let response = await fetch(url, buildOptions());
     if (response.status === 401) {
         const refreshed = await refreshAccessToken();
@@ -357,31 +340,28 @@ function handleAuthFailure() {
 // multiple devices could legitimately edit at the same instant, so this
 // keeps the fetch -> mutate -> conditional-save -> retry-on-409 cycle). ---
 
-// Does the actual Dropbox fetch and throws on any failure (including
-// a 401, after triggering the re-auth flow). Callers that must not
-// proceed on stale/missing data (e.g. updateDataWrapper) should call
-// this directly inside their own try/catch instead of fetchAll(),
-// which swallows errors for the background polling use case.
+// Fetches via the active storage provider and throws on any failure
+// (including a 401, after triggering the re-auth flow). Callers that must
+// not proceed on stale/missing data (e.g. updateDataWrapper) should call
+// this directly inside their own try/catch instead of fetchAll(), which
+// swallows errors for the background polling use case.
 async function fetchStateInternal() {
-    const response = await dropboxFetch('https://content.dropboxapi.com/2/files/download', () => ({
-        method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}`, 'Dropbox-API-Arg': JSON.stringify({ path: FILE_PATH }) },
-    }));
+    const result = await storageProvider.fetchConfig(authFetch, () => accessToken, FILE_PATH);
 
-    if (response.status === 401) {
+    if (result.status === 'unauthorized') {
         handleAuthFailure();
         throw new Error('Unauthorized');
     }
-    if (response.status === 409) {
+    if (result.status === 'not-found') {
         appData = defaultData;
         if (!appData.activeEventId) appData.activeEventId = appData.events[0].id;
         await saveState();
         return;
     }
-    if (!response.ok) throw new Error('Failed to fetch from Dropbox');
+    if (result.status === 'error') throw result.error;
 
-    currentRev = JSON.parse(response.headers.get('Dropbox-API-Result')).rev;
-    appData = await response.json();
+    currentRev = result.rev;
+    appData = result.data;
 
     if (!appData.events) appData.events = defaultData.events;
     if (!appData.settings) appData.settings = defaultData.settings;
@@ -389,25 +369,15 @@ async function fetchStateInternal() {
 }
 
 async function saveState() {
-    const mode = currentRev ? { '.tag': 'update', update: currentRev } : 'add';
-    const response = await dropboxFetch('https://content.dropboxapi.com/2/files/upload', () => ({
-        method: 'POST',
-        headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/octet-stream',
-            'Dropbox-API-Arg': JSON.stringify({ path: FILE_PATH, mode: mode, autorename: false, mute: true }),
-        },
-        body: JSON.stringify(appData),
-    }));
-    if (response.status === 401) {
+    const result = await storageProvider.saveConfig(authFetch, () => accessToken, FILE_PATH, appData, currentRev);
+    if (result.status === 'unauthorized') {
         handleAuthFailure();
         throw new Error('Unauthorized');
     }
-    if (response.status === 409) {
-        return false;
-    }
+    if (result.status === 'conflict') return false;
+    if (result.status === 'error') throw result.error;
 
-    currentRev = (await response.json()).rev;
+    currentRev = result.rev;
     return true;
 }
 
@@ -420,38 +390,27 @@ function makeEntryId() {
     return window.crypto.randomUUID();
 }
 
-// Downloads every entry file for one event's ledger in a single Dropbox
-// API call (files/download_zip on the event's folder) instead of listing
-// the folder and downloading each small file individually — the read cost
-// then stays flat regardless of how many transactions the event has
-// accumulated, up to Dropbox's own download_zip ceiling (folders under
-// 20GB / 10,000 entries), comfortably beyond what a live event produces.
+// Downloads every entry for one event's ledger via the active storage
+// provider — for Dropbox, that's a single files/download_zip call on the
+// event's folder instead of listing it and downloading each small file
+// individually, so the read cost stays flat regardless of how many
+// transactions the event has accumulated. See js/providers/dropbox.js for
+// the ceiling that holds at (and BACKLOG.md for why a different provider
+// might not be able to make the same one-call guarantee).
 async function downloadTransactionEntries(eventId) {
     if (!eventId) return [];
-    const response = await dropboxFetch('https://content.dropboxapi.com/2/files/download_zip', () => ({
-        method: 'POST',
-        headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Dropbox-API-Arg': JSON.stringify({ path: `/transactions/${eventId}` }),
-        },
-    }));
-    if (response.status === 401) {
+    const result = await storageProvider.fetchLedger(authFetch, () => accessToken, `/transactions/${eventId}`);
+    if (result.status === 'unauthorized') {
         handleAuthFailure();
         throw new Error('Unauthorized');
     }
-    if (response.status === 409) {
+    if (result.status === 'not-found') {
         // No transactions folder yet for this event (e.g. brand new event,
-        // nobody has added anything yet) — same "doesn't exist yet"
-        // convention Dropbox uses elsewhere in this app; see
-        // fetchStateInternal's 409 handling above.
+        // nobody has added anything yet) — not a real error.
         return [];
     }
-    if (!response.ok) throw new Error('Failed to download transaction entries');
-
-    const blob = await response.blob();
-    const zip = await JSZip.loadAsync(blob);
-    const files = Object.values(zip.files).filter((f) => !f.dir && f.name.endsWith('.json'));
-    return Promise.all(files.map(async (file) => JSON.parse(await file.async('string'))));
+    if (result.status === 'error') throw result.error;
+    return result.entries;
 }
 
 async function fetchTransactionEntriesInternal() {
@@ -473,25 +432,13 @@ function getVisibleTransactionEntries() {
 }
 
 async function writeTransactionEntry(entry) {
-    const response = await dropboxFetch('https://content.dropboxapi.com/2/files/upload', () => ({
-        method: 'POST',
-        headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/octet-stream',
-            'Dropbox-API-Arg': JSON.stringify({
-                path: `/transactions/${entry.eventId}/${entry.id}.json`,
-                mode: 'add',
-                autorename: false,
-                mute: true,
-            }),
-        },
-        body: JSON.stringify(entry),
-    }));
-    if (response.status === 401) {
+    const path = `/transactions/${entry.eventId}/${entry.id}.json`;
+    const result = await storageProvider.writeLedgerEntry(authFetch, () => accessToken, path, entry);
+    if (result.status === 'unauthorized') {
         handleAuthFailure();
         throw new Error('Unauthorized');
     }
-    if (!response.ok) throw new Error('Failed to write transaction entry');
+    if (result.status === 'error') throw result.error;
 }
 
 // A single, non-queueing attempt to save one entry — used both for the

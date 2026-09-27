@@ -30,6 +30,34 @@ from this list — this file is only what's still outstanding.
       usage at a large team count (20+) shows the pacing feels too fast/slow
       or a page ends up more sparsely filled than expected.
 
+## Product
+
+- [ ] **[FEATURE] Google Drive as a second storage provider.** The
+      fetch/save/retry orchestration in `js/app.js` (`runUpdateWithRetry`,
+      the offline write queue) already only talks to the interface in
+      `js/providers/dropbox.js` (`getAuthUrl`/`exchangeCodeForToken`/
+      `refreshAccessToken`/`fetchConfig`/`saveConfig`/`fetchLedger`/
+      `writeLedgerEntry`), not to Dropbox's raw API — that extraction is
+      done and covered by `test/providers/dropbox.test.js`. A
+      `GoogleDriveProvider` implementing the same shape is real work, not a
+      thin wrapper, for two confirmed reasons: (1) Drive's REST API has no
+      equivalent to Dropbox's single-call `files/download_zip` — reading a
+      whole ledger folder would mean `files.list` (paginated) plus batched
+      `files.get` calls (Drive's batch endpoint caps at 100 requests per
+      batch, still counted individually against quota), a real change to
+      the flat-read-cost property the ledger design depends on; (2) Drive's
+      `files.update` has no If-Match/ETag conditional-write support, so
+      `saveConfig`'s clean "reject if it changed since I read it" guarantee
+      (Dropbox's `rev` parameter) would become a racier read-then-compare-
+      then-write for the shared config file. Before building this: spike
+      the list+batch read pattern's real latency at a realistic transaction
+      count, and settle whether Drive's ledger should use the same
+      per-transaction-file shape or something coarser suited to Drive's
+      strengths instead. Also needed regardless of the ledger question: a
+      find-or-create-and-cache-folder-ID layer (Drive addresses files by ID,
+      not path), a provider picker at sign-in time, and `index.html`'s CSP
+      `connect-src` extended to Google's API hosts.
+
 ## Process
 
 Every PR that fixes a bug or ships an enhancement should:

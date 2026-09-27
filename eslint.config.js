@@ -17,7 +17,6 @@ const logicGlobals = {
     isViewerHash: 'readonly',
     KEYER_HASH: 'readonly',
     isKeyerHash: 'readonly',
-    buildDropboxAuthUrl: 'readonly',
     computeRetryDelay: 'readonly',
     runUpdateWithRetry: 'readonly',
     flushPendingQueue: 'readonly',
@@ -32,6 +31,14 @@ const logicGlobals = {
     paginate: 'readonly',
 };
 
+// Names js/providers/dropbox.js attaches to `window` (its DropboxProvider
+// object) — js/app.js references this as a global the same way it does
+// logic.js's exports. A future second provider module would get its own
+// entry here alongside this one.
+const providerGlobals = {
+    DropboxProvider: 'readonly',
+};
+
 module.exports = [
     js.configs.recommended,
     prettierConfig,
@@ -39,22 +46,24 @@ module.exports = [
         ignores: ['node_modules/**', 'css/tailwind.css'],
     },
     {
-        // js/logic.js: runs in both the browser (plain <script>) and Node
-        // (require()'d by the test suite) — see the module.exports guard
-        // at the bottom of the file.
-        files: ['js/logic.js'],
+        // js/logic.js and js/providers/*.js: run in both the browser (plain
+        // <script>) and Node (require()'d by the test suite) — see the
+        // module.exports guard at the bottom of each file.
+        files: ['js/logic.js', 'js/providers/*.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'script',
             globals: {
                 ...globals.browser,
                 ...globals.node,
+                JSZip: 'readonly',
             },
         },
     },
     {
         // js/app.js: browser-only, loaded via <script src="js/app.js"> after
-        // js/logic.js. Not require()'d anywhere, so no Node globals needed.
+        // js/logic.js and the provider modules. Not require()'d anywhere,
+        // so no Node globals needed.
         files: ['js/app.js'],
         languageOptions: {
             ecmaVersion: 2022,
@@ -62,6 +71,7 @@ module.exports = [
             globals: {
                 ...globals.browser,
                 ...logicGlobals,
+                ...providerGlobals,
                 JSZip: 'readonly',
             },
         },
