@@ -960,7 +960,7 @@ function renderManagement() {
     } else {
         appData.events.forEach((ev) => {
             evList.innerHTML += `
-                <div class="bg-white dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm">
+                <div class="min-w-0 bg-white dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm">
                     <input type="text" id="ev-name-${ev.id}" value="${escapeHtml(ev.name)}" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-3 font-semibold shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
                     <div class="flex flex-wrap gap-2 mb-3">
                         <div class="flex-1 min-w-[100px]"><label class="text-xs text-gray-500">Goal ($)</label><input type="number" id="ev-goal-${ev.id}" value="${ev.goalAmount || ''}" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded text-xs shadow-inner bg-white dark:bg-gray-700"></div>
@@ -988,14 +988,14 @@ function renderManagement() {
                 )
                 .join('');
             entList.innerHTML += `
-                <div class="bg-white dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col gap-3">
+                <div class="min-w-0 bg-white dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col gap-3">
                     <div class="flex gap-2">
-                        <input type="text" id="ent-pub-${ent.id}" value="${escapeHtml(ent.namePublic)}" class="flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-sm font-semibold shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Public Name">
-                        <input type="text" id="ent-priv-${ent.id}" value="${escapeHtml(ent.namePrivate)}" class="flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-sm shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Private Name">
+                        <input type="text" id="ent-pub-${ent.id}" value="${escapeHtml(ent.namePublic)}" class="min-w-0 flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-sm font-semibold shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Public Name">
+                        <input type="text" id="ent-priv-${ent.id}" value="${escapeHtml(ent.namePrivate)}" class="min-w-0 flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-sm shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Private Name">
                     </div>
                     <div class="flex gap-2">
-                        <input type="url" id="ent-img-${ent.id}" value="${escapeHtml(ent.imageUrl)}" class="flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-sm shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Image URL">
-                        <select id="ent-col-${ent.id}" class="p-2 border border-gray-400 dark:border-gray-600 rounded text-sm ${ent.color} text-white font-semibold shadow-inner outline-none">${colorOptions}</select>
+                        <input type="url" id="ent-img-${ent.id}" value="${escapeHtml(ent.imageUrl)}" class="min-w-0 flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-sm shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Image URL">
+                        <select id="ent-col-${ent.id}" class="min-w-0 flex-shrink-0 p-2 border border-gray-400 dark:border-gray-600 rounded text-sm ${ent.color} text-white font-semibold shadow-inner outline-none">${colorOptions}</select>
                     </div>
                     <div class="flex justify-between items-center mt-1 border-t dark:border-gray-700 pt-3">
                         <button data-action="edit-entity" data-id="${ent.id}" class="text-xs bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 font-semibold py-1.5 px-4 rounded transition-colors">Save Changes</button>
