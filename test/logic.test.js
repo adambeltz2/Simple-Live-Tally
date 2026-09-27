@@ -7,6 +7,10 @@ const {
     GENERAL_FUND_ID,
     isGeneralFundEntry,
     computeEventTotal,
+    GENERAL_FUND_LABEL,
+    resolveEntitySelection,
+    resolveThemeColor,
+    resolveLogoUrl,
     computeGaugeGeometry,
     isDuplicateName,
     isValidTransactionAmount,
@@ -127,6 +131,43 @@ test('computeEventTotal', async (t) => {
     });
 });
 
+test('resolveEntitySelection', async (t) => {
+    const entities = [
+        { id: 'e1', namePublic: 'Team A' },
+        { id: 'e2', namePublic: 'Team B' },
+    ];
+
+    await t.test('resolves an exact team name match to its id', () => {
+        assert.equal(resolveEntitySelection(entities, 'Team A'), 'e1');
+        assert.equal(resolveEntitySelection(entities, 'Team B'), 'e2');
+    });
+
+    await t.test('trims surrounding whitespace before matching', () => {
+        assert.equal(resolveEntitySelection(entities, '  Team A  '), 'e1');
+    });
+
+    await t.test('resolves the General Fund label to GENERAL_FUND_ID', () => {
+        assert.equal(resolveEntitySelection(entities, GENERAL_FUND_LABEL), GENERAL_FUND_ID);
+    });
+
+    await t.test('returns null for an unfinished/unmatched search and empty input', () => {
+        assert.equal(resolveEntitySelection(entities, 'Team'), null, 'a partial, in-progress search must not match');
+        assert.equal(resolveEntitySelection(entities, 'Nonexistent Team'), null);
+        assert.equal(resolveEntitySelection(entities, ''), null);
+        assert.equal(resolveEntitySelection(entities, '   '), null);
+        assert.equal(resolveEntitySelection(entities, undefined), null);
+    });
+
+    await t.test('is case-sensitive (matches namePublic exactly, as the datalist renders it)', () => {
+        assert.equal(resolveEntitySelection(entities, 'team a'), null);
+    });
+
+    await t.test('handles an empty entities list', () => {
+        assert.equal(resolveEntitySelection([], 'Team A'), null);
+        assert.equal(resolveEntitySelection(undefined, 'Team A'), null);
+    });
+});
+
 test('sortEntitiesByTotal', async (t) => {
     await t.test('orders entities highest total first', () => {
         const entities = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
@@ -152,6 +193,46 @@ test('sortEntitiesByTotal', async (t) => {
         const entities = [{ id: 'a' }, { id: 'b' }];
         const sorted = sortEntitiesByTotal(entities, {});
         assert.equal(sorted.length, 2);
+    });
+});
+
+test('resolveThemeColor', async (t) => {
+    await t.test("uses the active event's own themeColor when set", () => {
+        const settings = { themeColor: 'bg-blue-600' };
+        const activeEvent = { themeColor: 'bg-red-600' };
+        assert.equal(resolveThemeColor(settings, activeEvent), 'bg-red-600');
+    });
+
+    await t.test('falls back to Settings when the event has no override', () => {
+        const settings = { themeColor: 'bg-purple-600' };
+        assert.equal(resolveThemeColor(settings, { themeColor: '' }), 'bg-purple-600');
+        assert.equal(resolveThemeColor(settings, {}), 'bg-purple-600');
+        assert.equal(resolveThemeColor(settings, null), 'bg-purple-600');
+    });
+
+    await t.test('falls back to the hardcoded default when nothing is set', () => {
+        assert.equal(resolveThemeColor({}, {}), 'bg-blue-600');
+        assert.equal(resolveThemeColor(null, null), 'bg-blue-600');
+    });
+});
+
+test('resolveLogoUrl', async (t) => {
+    await t.test("uses the active event's own logoUrl when set", () => {
+        const settings = { logoUrl: 'https://example.com/app-logo.png' };
+        const activeEvent = { logoUrl: 'https://example.com/event-logo.png' };
+        assert.equal(resolveLogoUrl(settings, activeEvent), 'https://example.com/event-logo.png');
+    });
+
+    await t.test('falls back to Settings when the event has no override', () => {
+        const settings = { logoUrl: 'https://example.com/app-logo.png' };
+        assert.equal(resolveLogoUrl(settings, { logoUrl: '' }), 'https://example.com/app-logo.png');
+        assert.equal(resolveLogoUrl(settings, {}), 'https://example.com/app-logo.png');
+        assert.equal(resolveLogoUrl(settings, null), 'https://example.com/app-logo.png');
+    });
+
+    await t.test('falls back to an empty string when nothing is set', () => {
+        assert.equal(resolveLogoUrl({}, {}), '');
+        assert.equal(resolveLogoUrl(null, null), '');
     });
 });
 

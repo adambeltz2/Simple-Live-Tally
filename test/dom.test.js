@@ -45,6 +45,20 @@ function loadApp(url) {
     window.eval(LOGIC_SOURCE);
     window.eval(DROPBOX_PROVIDER_SOURCE);
     window.eval(APP_SOURCE);
+    // app.js's last statement is `window.onload = initApp`, matching a real
+    // page load. jsdom does fire a real `load` event here (asynchronously,
+    // after this function returns) — and initApp(), if a test happens to
+    // have `dropbox_token` set in localStorage already, starts several
+    // setInterval(…, 1000) polling loops (refresh timer, countdown,
+    // possibly TV field rotation) that nothing in this file ever clears.
+    // Across ~200 tests that add up to hundreds of live one-second
+    // intervals ticking away in orphaned jsdom windows, which is enough to
+    // stop the whole `node --test` process from ever exiting. Tests that
+    // actually need initApp()'s effects call it (or handleAuthRedirect(),
+    // which calls it) directly, so the auto-fired one here is only ever an
+    // unwanted side effect — remove the handler before that event has a
+    // chance to fire.
+    window.onload = null;
     return window;
 }
 
@@ -141,6 +155,22 @@ test('DOM: top-level and management sub-tab navigation', async (t) => {
         assert.equal(document.getElementById('view-management').classList.contains('hidden'), true);
     });
 
+    await t.test('switchTab widens main-container for Data Management, narrows it back for the Live Dashboard', () => {
+        const window = loadApp();
+        const container = window.document.getElementById('main-container');
+
+        assert.equal(container.classList.contains('max-w-5xl'), true, 'starts at the dashboard reading width');
+        assert.equal(container.classList.contains('max-w-[1800px]'), false);
+
+        window.switchTab('management');
+        assert.equal(container.classList.contains('max-w-5xl'), false);
+        assert.equal(container.classList.contains('max-w-[1800px]'), true);
+
+        window.switchTab('dashboard');
+        assert.equal(container.classList.contains('max-w-5xl'), true);
+        assert.equal(container.classList.contains('max-w-[1800px]'), false);
+    });
+
     await t.test('switchMgmtTab shows exactly one pane and marks exactly one button active', () => {
         const window = loadApp();
         const { document } = window;
@@ -213,15 +243,42 @@ test('DOM: dashboard rendering', async (t) => {
         );
     });
 
-    await t.test('the entity dropdown offers a General Fund / Donation option alongside every team', () => {
+    await t.test('the goal gauge follows the actual light/dark theme, not just TV mode, on a light TV display', () => {
+        // Regression guard: the gauge used to hardcode `isTvMode ||
+        // <dark check>`, which meant it always rendered dark-mode colors on
+        // a TV display even after the operator toggled that device to
+        // light — the white gauge text/track was unreadable on the resulting
+        // light background.
+        const window = loadApp();
+        window.location.hash = '#tv';
+        window.checkViewMode();
+        window.document.documentElement.classList.remove('dark'); // simulate the TV device switched to light
+
+        window.appData = baseAppData({
+            events: [{ id: 'evt1', name: 'Main', goalAmount: 200, startDate: '', endDate: '' }],
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.transactionEntries = [
+            baseEntry({ id: 't1', logicalId: 't1', entityId: 'e1', eventId: 'evt1', amount: 50 }),
+        ];
+
+        window.renderApp();
+
+        const gaugeHtml = window.document.getElementById('goal-gauge-container').innerHTML;
+        assert.match(gaugeHtml, /text-gray-900/, 'light theme must use dark text on the gauge value');
+        assert.doesNotMatch(gaugeHtml, /text-white/, 'light theme must not use white gauge text');
+        assert.match(gaugeHtml, /bg-gray-200/, 'light theme must use the light track color, not the dark one');
+    });
+
+    await t.test('the entity search datalist offers a General Fund / Donation option alongside every team', () => {
         const window = loadApp();
         window.appData = baseAppData({
             entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
         });
         window.renderApp();
 
-        const options = Array.from(window.document.getElementById('entity-select').options).map((o) => o.value);
-        assert.deepEqual(options, ['e1', window.GENERAL_FUND_ID]);
+        const options = Array.from(window.document.getElementById('entity-options').children).map((o) => o.value);
+        assert.deepEqual(options, ['Team A', window.GENERAL_FUND_LABEL]);
     });
 
     await t.test('an empty roster shows the setup prompt instead of throwing', () => {
@@ -351,7 +408,11 @@ test('DOM: dashboard rendering', async (t) => {
             window.renderApp();
 
             const board = window.document.getElementById('leaderboard');
-            assert.match(board.textContent, /Also competing — 11 more/, 'field count is everyone past the top 5');
+            assert.doesNotMatch(
+                board.textContent,
+                /also competing/i,
+                'the field grid should speak for itself, not announce itself with a label',
+            );
             // Every single team must still appear somewhere — nobody is hidden
             // behind a "+N more" note the way the old bar-list capped things.
             entities.forEach((e) => assert.match(board.textContent, new RegExp(e.namePublic)));
@@ -374,8 +435,8 @@ test('DOM: dashboard rendering', async (t) => {
         const board = window.document.getElementById('leaderboard');
         const grid = board.querySelector('.grid');
         assert.equal(grid.children.length, 25, 'dashboard never paginates — all 25 field teams render at once');
-        // 5 spotlight rows + 1 "Also competing" label + 1 field grid, and
-        // nothing else — no page-indicator dots outside the TV display.
+        // 5 spotlight rows + 1 unlabeled divider + 1 field grid, and nothing
+        // else — no page-indicator dots outside the TV display.
         assert.equal(board.children.length, 7);
     });
 
@@ -416,7 +477,7 @@ test('DOM: input validation', async (t) => {
         };
         window.renderApp();
 
-        window.document.getElementById('entity-select').value = 'e1';
+        window.document.getElementById('entity-select').value = 'Team A';
         window.document.getElementById('amount-input').value = '-5';
         window.submitTransaction();
 
@@ -456,6 +517,210 @@ test('DOM: input validation', async (t) => {
         window.saveSettings();
 
         assert.equal(window.appData.settings.logoUrl, '', 'settings must be untouched on rejection');
+    });
+});
+
+test('DOM: per-event branding (logo/theme color)', async (t) => {
+    await t.test("applyThemeColor uses the active event's own theme color over the Settings default", () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            settings: { title: 'Test', logoUrl: '', themeColor: 'bg-blue-600' },
+            events: [
+                {
+                    id: 'evt1',
+                    name: 'Cook-Off',
+                    goalAmount: null,
+                    startDate: '',
+                    endDate: '',
+                    themeColor: 'bg-purple-600',
+                },
+            ],
+            activeEventId: 'evt1',
+        });
+
+        window.applyThemeColor();
+
+        assert.match(window.document.getElementById('main-header').className, /bg-purple-600/);
+        assert.doesNotMatch(window.document.getElementById('main-header').className, /bg-blue-600/);
+    });
+
+    await t.test('an event with no themeColor override falls back to the Settings default', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            settings: { title: 'Test', logoUrl: '', themeColor: 'bg-green-600' },
+            events: [{ id: 'evt1', name: 'Cook-Off', goalAmount: null, startDate: '', endDate: '', themeColor: '' }],
+            activeEventId: 'evt1',
+        });
+
+        window.applyThemeColor();
+
+        assert.match(window.document.getElementById('main-header').className, /bg-green-600/);
+    });
+
+    await t.test("the dashboard header logo uses the active event's own logoUrl over the Settings default", () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            settings: { title: 'Test', logoUrl: 'https://example.com/app-logo.png', themeColor: 'bg-blue-600' },
+            events: [
+                {
+                    id: 'evt1',
+                    name: 'Cook-Off',
+                    goalAmount: null,
+                    startDate: '',
+                    endDate: '',
+                    logoUrl: 'https://example.com/event-logo.png',
+                },
+            ],
+            activeEventId: 'evt1',
+        });
+
+        window.renderApp();
+
+        const headerLogo = window.document.getElementById('header-logo');
+        assert.equal(headerLogo.src, 'https://example.com/event-logo.png');
+        assert.equal(headerLogo.classList.contains('hidden'), false);
+    });
+
+    await t.test("switching the active event re-applies that event's own branding", async () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            settings: { title: 'Test', logoUrl: '', themeColor: 'bg-blue-600' },
+            events: [
+                {
+                    id: 'evt1',
+                    name: 'Event One',
+                    goalAmount: null,
+                    startDate: '',
+                    endDate: '',
+                    themeColor: 'bg-red-600',
+                },
+                {
+                    id: 'evt2',
+                    name: 'Event Two',
+                    goalAmount: null,
+                    startDate: '',
+                    endDate: '',
+                    themeColor: 'bg-purple-600',
+                },
+            ],
+            activeEventId: 'evt1',
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.accessToken = 'fake-token';
+        window.renderApp();
+        window.applyThemeColor();
+        assert.match(window.document.getElementById('main-header').className, /bg-red-600/);
+
+        window.fetch = mockDropboxFetch({ config: window.appData });
+        window.document.getElementById('active-event-select').value = 'evt2';
+        await window.changeActiveEvent();
+
+        assert.match(window.document.getElementById('main-header').className, /bg-purple-600/);
+    });
+
+    await t.test('addEvent stores the entered logo URL and theme color, and rejects an invalid logo URL', async () => {
+        const window = loadApp();
+        window.appData = baseAppData({ events: [] });
+        window.accessToken = 'fake-token';
+        window.alert = () => {};
+        window.switchTab('management');
+        window.switchMgmtTab('events');
+
+        // Invalid logo URL: rejected before any save is attempted.
+        window.fetch = async () => {
+            throw new Error('fetch should not be called for an invalid event logo URL');
+        };
+        window.document.getElementById('new-event-name').value = 'Cook-Off';
+        window.document.getElementById('new-event-logo').value = 'javascript:alert(1)';
+        window.addEvent();
+        assert.equal(window.appData.events.length, 0, 'no event should be added with an invalid logo URL');
+
+        // Valid submission: stores both fields on the new event.
+        window.fetch = mockDropboxFetch({ config: window.appData });
+        window.document.getElementById('new-event-name').value = 'Cook-Off';
+        window.document.getElementById('new-event-logo').value = 'https://example.com/logo.png';
+        window.document.getElementById('new-event-color').value = 'bg-red-600';
+        window.addEvent();
+        await flushAsync();
+
+        assert.equal(window.appData.events.length, 1);
+        assert.equal(window.appData.events[0].logoUrl, 'https://example.com/logo.png');
+        assert.equal(window.appData.events[0].themeColor, 'bg-red-600');
+    });
+
+    await t.test("editEvent updates an existing event's logo URL and theme color", async () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            events: [
+                {
+                    id: 'evt1',
+                    name: 'Cook-Off',
+                    goalAmount: null,
+                    startDate: '',
+                    endDate: '',
+                    logoUrl: '',
+                    themeColor: '',
+                },
+            ],
+            activeEventId: 'evt1',
+        });
+        window.accessToken = 'fake-token';
+        window.switchTab('management');
+        window.switchMgmtTab('events');
+        window.fetch = mockDropboxFetch({ config: window.appData });
+
+        window.document.getElementById('ev-logo-evt1').value = 'https://example.com/new-logo.png';
+        window.document.getElementById('ev-color-evt1').value = 'bg-green-600';
+        window.editEvent('evt1');
+        await flushAsync();
+
+        assert.equal(window.appData.events[0].logoUrl, 'https://example.com/new-logo.png');
+        assert.equal(window.appData.events[0].themeColor, 'bg-green-600');
+    });
+});
+
+test('DOM: Dropbox disconnect', async (t) => {
+    await t.test('does nothing if the operator cancels the confirmation', () => {
+        const window = loadApp();
+        window.localStorage.setItem('dropbox_token', 'tok123');
+        window.localStorage.setItem('dropbox_refresh_token', 'refresh123');
+        window.confirm = () => false;
+        window.reloadPage = () => {
+            throw new Error('reload should not happen when the operator cancels');
+        };
+
+        window.disconnectDropbox();
+
+        assert.equal(window.localStorage.getItem('dropbox_token'), 'tok123');
+        assert.equal(window.localStorage.getItem('dropbox_refresh_token'), 'refresh123');
+    });
+
+    await t.test('clears the stored tokens and reloads once confirmed', () => {
+        const window = loadApp();
+        window.localStorage.setItem('dropbox_token', 'tok123');
+        window.localStorage.setItem('dropbox_refresh_token', 'refresh123');
+        window.confirm = () => true;
+        let reloaded = false;
+        window.reloadPage = () => {
+            reloaded = true;
+        };
+
+        window.disconnectDropbox();
+
+        assert.equal(window.localStorage.getItem('dropbox_token'), null);
+        assert.equal(window.localStorage.getItem('dropbox_refresh_token'), null);
+        assert.equal(reloaded, true);
+    });
+
+    await t.test('the Disconnect button click is wired to disconnectDropbox', () => {
+        const window = loadApp();
+        window.localStorage.setItem('dropbox_token', 'tok123');
+        window.confirm = () => true;
+        window.reloadPage = () => {};
+
+        window.document.getElementById('disconnect-btn').click();
+
+        assert.equal(window.localStorage.getItem('dropbox_token'), null);
     });
 });
 
@@ -507,7 +772,7 @@ test('DOM: event wiring (addEventListener / delegation, not direct calls)', asyn
             entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
         });
         window.renderApp();
-        window.document.getElementById('entity-select').value = 'e1';
+        window.document.getElementById('entity-select').value = 'Team A';
         window.document.getElementById('amount-input').value = '-5';
 
         window.document.getElementById('submit-btn').click();
@@ -603,7 +868,7 @@ test('DOM: transaction ledger (create/edit/delete as immutable entries)', async 
         const uploads = [];
         window.fetch = mockDropboxFetch({ entryUploads: uploads });
 
-        window.document.getElementById('entity-select').value = 'e1';
+        window.document.getElementById('entity-select').value = 'Team A';
         window.document.getElementById('amount-input').value = '25';
         window.submitTransaction();
         await flushAsync();
@@ -716,7 +981,7 @@ test('DOM: transaction ledger (create/edit/delete as immutable entries)', async 
         };
         window.fetch = async () => ({ ok: false, status: 500 });
 
-        window.document.getElementById('entity-select').value = 'e1';
+        window.document.getElementById('entity-select').value = 'Team A';
         window.document.getElementById('amount-input').value = '10';
         window.submitTransaction();
         await flushAsync();
@@ -740,7 +1005,7 @@ test('DOM: transaction ledger (create/edit/delete as immutable entries)', async 
         window.renderApp();
         window.fetch = async () => ({ ok: false, status: 500 });
 
-        window.document.getElementById('entity-select').value = 'e1';
+        window.document.getElementById('entity-select').value = 'Team A';
         window.document.getElementById('amount-input').value = '10';
         window.submitTransaction();
         await flushAsync();
@@ -885,7 +1150,37 @@ test('DOM: multi-device viewer mode (#tv-viewer)', async (t) => {
         assert.equal(document.getElementById('main-footer').classList.contains('hidden'), true);
         assert.equal(document.documentElement.classList.contains('dark'), true);
         assert.match(document.getElementById('login-text').innerText, /view-only/);
+        assert.equal(
+            document.getElementById('tv-theme-toggle').classList.contains('hidden'),
+            false,
+            'the TV theme toggle must be reachable once the main header is hidden',
+        );
     });
+
+    await t.test(
+        'the TV theme toggle switches this display to light mode without touching localStorage from another device',
+        () => {
+            const window = loadApp();
+            const { document } = window;
+
+            window.location.hash = '#tv';
+            window.checkViewMode();
+            assert.equal(document.documentElement.classList.contains('dark'), true, 'defaults to dark on first visit');
+
+            document.getElementById('tv-theme-toggle').click();
+            assert.equal(
+                document.documentElement.classList.contains('dark'),
+                false,
+                'toggle flips this device to light',
+            );
+            assert.equal(window.localStorage.getItem('darkMode'), 'false');
+
+            // Re-running checkViewMode() (e.g. a later hashchange) must respect
+            // the just-stored preference instead of re-forcing dark.
+            window.checkViewMode();
+            assert.equal(document.documentElement.classList.contains('dark'), false);
+        },
+    );
 
     await t.test('leaving #tv-viewer restores the normal admin layout and login copy', () => {
         const window = loadApp();
@@ -1031,7 +1326,7 @@ test('DOM: keyer mode (#keyer)', async (t) => {
             };
             window.fetch = mockDropboxFetch({});
 
-            window.document.getElementById('entity-select').value = 'e1';
+            window.document.getElementById('entity-select').value = 'Team A';
             window.document.getElementById('amount-input').value = '10';
             window.submitTransaction();
             await flushAsync();
@@ -1059,7 +1354,7 @@ test('DOM: keyer mode (#keyer)', async (t) => {
         };
         window.fetch = mockDropboxFetch({});
 
-        window.document.getElementById('entity-select').value = 'e1';
+        window.document.getElementById('entity-select').value = 'Team A';
         window.document.getElementById('amount-input').value = '10';
         window.submitTransaction();
         await flushAsync();

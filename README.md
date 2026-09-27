@@ -74,7 +74,7 @@ The team ranking is a typographic ticker — a rank number, the team name with a
 
 * **Up to 6 teams** — a single column of full-size rows.
 * **7–12 teams** — two columns of the same full-size rows, so the numbers stay just as large.
-* **13+ teams** — the top 5 stay full-size ("spotlight"); everyone else moves into a denser, wrapping grid below ("Also competing"). Nobody is ever hidden behind a "+N more" note — every team is always on screen somewhere.
+* **13+ teams** — the top 5 stay full-size ("spotlight"); everyone else moves into a denser, wrapping grid below. Nobody is ever hidden behind a "+N more" note — every team is always on screen somewhere.
 
 The Live Dashboard's field grid (13+ teams) simply grows and scrolls, since the operator is sitting right at that screen. The TV display never scrolls: once a roster is large enough that its field grid wouldn't fit one screen at a legible size, it instead pages through the field in batches, auto-advancing every few seconds with a small dot indicator showing how many pages there are — so a 30-team event still shows everyone, just not all at the exact same instant.
 
@@ -89,14 +89,16 @@ The Live Dashboard's field grid (13+ teams) simply grows and scrolls, since the 
 * **Strict Uniqueness Validation:** Prevents duplicate public team names during creation and modification processes.
 * **Scrolling Top Leaders Ticker:** An animated marquee ticker in the header showcases the top 1-N frontrunners continuously.
 * **Live Dashboard & Leaderboard:** Automatically polls Dropbox every 60 seconds to update totals and re-sort leaders dynamically. The ranking itself is a distance-legible ticker, not a bar chart: big tabular numbers and a small per-team color tick, laid out in three density tiers so it scales from a handful of teams up to dozens without ever shrinking below legible or hiding anyone behind a "+N more" note — see [Reading the Leaderboard at Any Size](#reading-the-leaderboard-at-any-size) below.
-* **Dynamic Event Goals:** Set financial goals for your events and watch an animated SVG Gauge Chart fill up in real-time. 
-* **General Fund Donations:** The "Add Transaction" entity dropdown includes a "Donation (no team — General Fund)" option — use it for gifts that should count toward the event's overall total/goal without affecting any team's ranking on the leaderboard.
-* **Custom Branding & Dark Mode:** Toggle between light and dark themes, upload a custom logo, and inject your own custom title and primary brand colors directly from the UI.
+* **Dynamic Event Goals:** Set a financial goal per event and watch a live progress bar (`$raised of $goal · N% to goal`) update in real time.
+* **General Fund Donations:** The "Add Transaction" entity field includes a "💝 Donation (no team — General Fund)" option — use it for gifts that should count toward the event's overall total/goal without affecting any team's ranking on the leaderboard.
+* **Type-to-Search Team Picker:** The "Add Transaction" entity field is a searchable text field, not a long dropdown — type a few letters of a team's name (or "Donation" for the General Fund) instead of scrolling, which matters once a roster has more than a handful of teams.
+* **Per-Event Branding & Dark Mode:** Set a logo and theme color per Event (Data Management > Events) — each event can look different, or leave either on "Use App Default" to fall back to the app-wide Settings value. Toggle light/dark independently on every device, including the TV/viewer display (its own toggle appears top-right there, since the regular header is hidden), each remembering its own choice.
 * **Dedicated TV / Projector Display Mode:** Append `#tv` to the URL to instantly switch to a high-contrast mode built for 1080p projectors — it never scrolls; a large roster pages through itself automatically instead.
 * **Multi-Device Display Mode:** Append `#tv-viewer` to the URL on a second computer to run the same TV display there, signed in independently with its own restricted, read-only Dropbox connection — see [Running the Dashboard on a Second Device](#running-the-dashboard-on-a-second-device) below.
 * **Dedicated Keyer Stations:** Append `#keyer` to the URL for a focused, admin-nav-free "Add Transaction" screen for a data-entry station — see [Roles](#roles) above.
-* **Full Data Management & Factory Resets:** Easily create, edit, or delete Events and Teams. Removing an Event or Team from the dashboard only removes it from view — the underlying transaction ledger entries are never deleted, so the full history always survives in the ZIP export.
+* **Full Data Management & Factory Resets:** Easily create, edit, or delete Events and Teams from a management panel that uses the full width of a wide screen. Removing an Event or Team from the dashboard only removes it from view — the underlying transaction ledger entries are never deleted, so the full history always survives in the ZIP export.
 * **Full Audit Trail Export:** Instantly export every settings/team/event snapshot and every individual transaction entry (including who entered it and when) as a timestamped `.zip` package right from the management panel.
+* **One-Click Disconnect:** A "Disconnect" button next to the connection status signs this device out of Dropbox and forces a full refresh — useful for switching accounts or forcing a clean resync without clearing browser storage by hand.
 
 ---
 

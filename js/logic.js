@@ -68,6 +68,44 @@
         return (transactions || []).filter((t) => t.eventId === eventId).reduce((sum, t) => sum + t.amount, 0);
     }
 
+    // The General Fund's entry in the Entity search field (see
+    // resolveEntitySelection() below) — shown as one of the choices in
+    // index.html's #entity-options <datalist>, alongside every team name.
+    const GENERAL_FUND_LABEL = '💝 Donation (no team — General Fund)';
+
+    // Resolves what the operator typed into the Entity search field (a
+    // plain <input list> + <datalist> combo, not a <select> — far faster to
+    // use than scrolling a dropdown once there are more than a handful of
+    // teams) back to the entityId a transaction should be recorded against.
+    // Team public names are enforced unique (see isDuplicateName), so an
+    // exact match is unambiguous. Returns null for anything that doesn't
+    // exactly match a known team or the General Fund label — including a
+    // partial, in-progress search the operator hasn't finished typing —
+    // so the caller rejects it the same way it already rejects "no team
+    // selected", rather than silently recording against the wrong team.
+    function resolveEntitySelection(entities, typedValue) {
+        const trimmed = (typedValue || '').trim();
+        if (!trimmed) return null;
+        if (trimmed === GENERAL_FUND_LABEL) return GENERAL_FUND_ID;
+        const match = (entities || []).find((e) => e.namePublic === trimmed);
+        return match ? match.id : null;
+    }
+
+    // The dashboard's branding (logo, theme color) is set per-event, not
+    // once for the whole app — an org running several events (each with its
+    // own name/logo/colors) shouldn't have every event stuck looking like
+    // whichever one was configured last in Settings. An event that leaves
+    // logoUrl/themeColor unset (empty string, or the field absent entirely
+    // on data predating this feature) falls back to the app-wide Settings
+    // value, which keeps a single-event setup working exactly as before.
+    function resolveThemeColor(settings, activeEvent) {
+        return (activeEvent && activeEvent.themeColor) || (settings && settings.themeColor) || 'bg-blue-600';
+    }
+
+    function resolveLogoUrl(settings, activeEvent) {
+        return (activeEvent && activeEvent.logoUrl) || (settings && settings.logoUrl) || '';
+    }
+
     // SVG arc geometry for the goal gauge: how far along the dash array the
     // stroke should be drawn to represent totalRaised / goalAmount.
     function computeGaugeGeometry(totalRaised, goalAmount, dashArray) {
@@ -332,6 +370,10 @@
         GENERAL_FUND_ID,
         isGeneralFundEntry,
         computeEventTotal,
+        GENERAL_FUND_LABEL,
+        resolveEntitySelection,
+        resolveThemeColor,
+        resolveLogoUrl,
         computeGaugeGeometry,
         isDuplicateName,
         isValidTransactionAmount,
