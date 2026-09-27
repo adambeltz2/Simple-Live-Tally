@@ -190,6 +190,40 @@ test('DOM: dashboard rendering', async (t) => {
         assert.match(board.innerHTML, /\$75\.00/, 'Team A total should be 50 + 25');
     });
 
+    await t.test('a General Fund donation counts toward the goal total but not any team leaderboard row', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            events: [{ id: 'evt1', name: 'Main', goalAmount: 200, startDate: '', endDate: '' }],
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.transactionEntries = [
+            baseEntry({ id: 't1', logicalId: 't1', entityId: 'e1', eventId: 'evt1', amount: 50 }),
+            baseEntry({ id: 't2', logicalId: 't2', entityId: window.GENERAL_FUND_ID, eventId: 'evt1', amount: 30 }),
+        ];
+
+        window.renderApp();
+
+        const board = window.document.getElementById('leaderboard');
+        assert.equal(board.children.length, 1, 'the General Fund entry must not become its own leaderboard row');
+        assert.match(board.innerHTML, /\$50\.00/, "Team A's own total must not include the donation");
+        assert.match(
+            window.document.getElementById('goal-gauge-container').innerHTML,
+            /\$80/,
+            'the goal gauge total must include the General Fund donation (50 + 30)',
+        );
+    });
+
+    await t.test('the entity dropdown offers a General Fund / Donation option alongside every team', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.renderApp();
+
+        const options = Array.from(window.document.getElementById('entity-select').options).map((o) => o.value);
+        assert.deepEqual(options, ['e1', window.GENERAL_FUND_ID]);
+    });
+
     await t.test('an empty roster shows the setup prompt instead of throwing', () => {
         const window = loadApp();
         window.appData = baseAppData({ events: [], entities: [] });
@@ -651,6 +685,22 @@ test('DOM: transaction ledger (create/edit/delete as immutable entries)', async 
             'one row per logical transaction, not per raw entry',
         );
         assert.equal(window.document.getElementById('tx-amt-t1').value, '30');
+    });
+
+    await t.test('a General Fund donation renders with a distinct label, not "Unknown"', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.transactionEntries = [
+            baseEntry({ id: 't1', logicalId: 't1', entityId: window.GENERAL_FUND_ID, amount: 100 }),
+        ];
+        window.switchTab('management');
+        window.switchMgmtTab('transactions');
+
+        const list = window.document.getElementById('transactions-list');
+        assert.match(list.innerHTML, /Donation \(General Fund\)/);
+        assert.doesNotMatch(list.innerHTML, /Unknown/);
     });
 
     await t.test('a network failure while writing an entry queues it instead of dropping it', async () => {

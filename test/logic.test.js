@@ -4,6 +4,9 @@ const {
     escapeHtml,
     computeTotals,
     sortEntitiesByTotal,
+    GENERAL_FUND_ID,
+    isGeneralFundEntry,
+    computeEventTotal,
     computeGaugeGeometry,
     isDuplicateName,
     isValidTransactionAmount,
@@ -86,6 +89,41 @@ test('computeTotals', async (t) => {
     await t.test('handles missing/empty inputs', () => {
         assert.deepEqual(computeTotals([], [], 'evt1'), {});
         assert.deepEqual(computeTotals(undefined, undefined, 'evt1'), {});
+    });
+
+    await t.test('excludes General Fund donations from per-entity totals', () => {
+        const transactions = [
+            { entityId: 'e1', eventId: 'evt1', amount: 10 },
+            { entityId: GENERAL_FUND_ID, eventId: 'evt1', amount: 250 },
+        ];
+        const totals = computeTotals(entities, transactions, 'evt1');
+        assert.deepEqual(totals, { e1: 10, e2: 0 });
+    });
+});
+
+test('isGeneralFundEntry', async (t) => {
+    await t.test('identifies the General Fund sentinel and nothing else', () => {
+        assert.equal(isGeneralFundEntry(GENERAL_FUND_ID), true);
+        assert.equal(isGeneralFundEntry('e1'), false);
+        assert.equal(isGeneralFundEntry(undefined), false);
+        assert.equal(isGeneralFundEntry(null), false);
+    });
+});
+
+test('computeEventTotal', async (t) => {
+    await t.test('sums every transaction for the event, team-tied and General Fund alike', () => {
+        const transactions = [
+            { entityId: 'e1', eventId: 'evt1', amount: 10 },
+            { entityId: 'e2', eventId: 'evt1', amount: 5 },
+            { entityId: GENERAL_FUND_ID, eventId: 'evt1', amount: 250 },
+            { entityId: 'e1', eventId: 'evt2', amount: 999 }, // different event, excluded
+        ];
+        assert.equal(computeEventTotal(transactions, 'evt1'), 265);
+    });
+
+    await t.test('handles missing/empty inputs', () => {
+        assert.equal(computeEventTotal([], 'evt1'), 0);
+        assert.equal(computeEventTotal(undefined, 'evt1'), 0);
     });
 });
 

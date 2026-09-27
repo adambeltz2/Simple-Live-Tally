@@ -529,6 +529,7 @@ async function exportDataZip() {
         summary.events[event.id] = {
             name: event.name,
             totals: computeTotals(appData.entities, entries, event.id),
+            eventTotal: computeEventTotal(entries, event.id),
             transactions: collapseTransactionLedger(entries),
         };
     }
@@ -1018,7 +1019,11 @@ function renderManagement() {
         } else {
             activeTx.forEach((tx) => {
                 const ent = appData.entities.find((e) => e.id === tx.entityId);
-                const entName = ent ? ent.namePublic : 'Unknown';
+                const entName = isGeneralFundEntry(tx.entityId)
+                    ? '💝 Donation (General Fund)'
+                    : ent
+                      ? ent.namePublic
+                      : 'Unknown';
                 const dt = new Date(tx.createDate).toLocaleString([], {
                     month: 'short',
                     day: 'numeric',
@@ -1116,6 +1121,13 @@ function renderApp() {
         }
         entitySelect.appendChild(opt);
     });
+    const generalFundOpt = document.createElement('option');
+    generalFundOpt.value = GENERAL_FUND_ID;
+    generalFundOpt.text = '💝 Donation (no team — General Fund)';
+    if (currentSelectedEntityId === GENERAL_FUND_ID) {
+        generalFundOpt.selected = true;
+    }
+    entitySelect.appendChild(generalFundOpt);
 
     const totals = computeTotals(appData.entities, getVisibleTransactionEntries(), appData.activeEventId);
     const sortedEntities = sortEntitiesByTotal(appData.entities, totals);
@@ -1144,7 +1156,11 @@ function renderApp() {
 
     // --- Render Goal Gauge ---
     const gaugeContainer = document.getElementById('goal-gauge-container');
-    const totalRaised = Object.values(totals).reduce((sum, val) => sum + val, 0);
+    // Uses every transaction for the event (team-tied and General Fund
+    // alike), not just Object.values(totals) — a General Fund donation
+    // must still count toward the overall total/goal even though it's
+    // excluded from computeTotals()'s per-entity (ranking) totals.
+    const totalRaised = computeEventTotal(getVisibleTransactionEntries(), appData.activeEventId);
 
     if (activeEvent && activeEvent.goalAmount && activeEvent.goalAmount > 0) {
         const goalAmount = parseFloat(activeEvent.goalAmount);

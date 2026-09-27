@@ -46,6 +46,28 @@
         return [...(entities || [])].sort((a, b) => (totals[b.id] || 0) - (totals[a.id] || 0));
     }
 
+    // Sentinel entityId for a transaction that counts toward the event's
+    // overall total/goal but isn't tied to any team — e.g. a general
+    // "Donation" that shouldn't influence team rankings. Not a real entity
+    // id (never appears in appData.entities), so computeTotals()'s
+    // per-entity totals naturally exclude it and sortEntitiesByTotal()
+    // never ranks it; use computeEventTotal() to get a sum that includes
+    // it alongside every team-tied transaction.
+    const GENERAL_FUND_ID = '__general_fund__';
+
+    function isGeneralFundEntry(entityId) {
+        return entityId === GENERAL_FUND_ID;
+    }
+
+    // Sums every transaction amount for an event regardless of entityId —
+    // unlike computeTotals() (which only counts entries whose entityId
+    // matches a known entity), this includes GENERAL_FUND_ID entries too,
+    // since a donation should still raise the event's overall total/goal
+    // even though it isn't tied to a team.
+    function computeEventTotal(transactions, eventId) {
+        return (transactions || []).filter((t) => t.eventId === eventId).reduce((sum, t) => sum + t.amount, 0);
+    }
+
     // SVG arc geometry for the goal gauge: how far along the dash array the
     // stroke should be drawn to represent totalRaised / goalAmount.
     function computeGaugeGeometry(totalRaised, goalAmount, dashArray) {
@@ -307,6 +329,9 @@
         escapeHtml,
         computeTotals,
         sortEntitiesByTotal,
+        GENERAL_FUND_ID,
+        isGeneralFundEntry,
+        computeEventTotal,
         computeGaugeGeometry,
         isDuplicateName,
         isValidTransactionAmount,
