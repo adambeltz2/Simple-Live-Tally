@@ -19,6 +19,17 @@ from this list — this file is only what's still outstanding.
       `js/app.js` (`downloadTransactionEntries`), `js/logic.js`
       (`collapseTransactionLedger`).
 
+- [ ] **[DEBT] TV field-grid page size and rotation interval are informed
+      estimates, not measured against a real screen.** `TICKER_TV_FIELD_PAGE_SIZE`
+      (18) and the 6-second rotation interval in `startTvFieldRotation()`
+      (`js/app.js`) were sized to look right in a browser window during
+      development, the same way the old hardcoded "top 10" TV cap was — not
+      measured against an actual 1080p projector at event-room viewing
+      distance, and not adaptive to how many field-grid columns a given
+      screen actually fits. Worth revisiting either constant if real event
+      usage at a large team count (20+) shows the pacing feels too fast/slow
+      or a page ends up more sparsely filled than expected.
+
 ## Process
 
 Every PR that fixes a bug or ships an enhancement should:

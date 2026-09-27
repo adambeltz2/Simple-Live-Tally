@@ -45,6 +45,13 @@ var refreshTimer = 60;
 var countdownInterval = null;
 var currentMgmtTab = 'settings';
 var isSubmittingTransaction = false;
+// Which page of the "field" grid the TV display is currently showing, once
+// a roster is large enough to need one (see the spotlight+field tier in
+// renderApp() and startTvFieldRotation() below). Clamped by modulo against
+// the current page count on every render, so it self-corrects if the
+// roster shrinks — no explicit reset needed.
+var tvFieldPage = 0;
+var tvFieldRotationInterval = null;
 // Updates that failed to save because of a network/conflict problem (not an
 // auth failure) wait here instead of being silently discarded — see
 // updateDataWrapper's allowQueue option and flushPendingWrites below.
@@ -1165,7 +1172,6 @@ function renderApp() {
 
     const totals = computeTotals(appData.entities, getVisibleTransactionEntries(), appData.activeEventId);
     const sortedEntities = sortEntitiesByTotal(appData.entities, totals);
-    const maxTotal = Math.max(...Object.values(totals), 10);
 
     // --- Render Scrolling Top Ticker (Top 5 Leaders) ---
     const tickerWrapper = document.getElementById('ticker-wrapper');
@@ -1233,81 +1239,115 @@ function renderApp() {
         gaugeContainer.classList.add('hidden');
     }
 
-    // --- Render Leaderboard Bars ---
+    // --- Render Leaderboard (Minimal Ticker) ---
+    // Three density tiers keep every team visible and legible instead of
+    // ever hiding one behind a "+N more" note (see TICKER_HERO_MAX/
+    // TICKER_TWIN_MAX/TICKER_SPOTLIGHT_SIZE in js/logic.js): a short roster
+    // gets one column of full-size rows, a medium one splits into two
+    // columns, and a large one keeps only the top TICKER_SPOTLIGHT_SIZE at
+    // full size with everyone else in a dense field grid below. On the TV
+    // display that field grid also pages through TICKER_TV_FIELD_PAGE_SIZE
+    // entries at a time (see startTvFieldRotation()) so it never shrinks
+    // past legible or needs to scroll; the dashboard just lets it grow.
     const board = document.getElementById('leaderboard');
-    const overflowNote = document.getElementById('leaderboard-overflow');
+    board.classList.toggle('overflow-y-auto', !isTvMode);
+    board.classList.toggle('overflow-hidden', isTvMode);
 
-    const tagPadding = isTvMode ? 'py-0.5 px-4 text-lg' : 'py-1 px-3 text-sm';
-    const barHeight = isTvMode ? 'h-8 mb-3' : 'h-8 mb-4';
-    const badgeBg = isTvMode
-        ? 'bg-gray-800 text-gray-200 border border-gray-700'
-        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700';
-    const trackBg = isTvMode ? 'bg-gray-800' : 'bg-gray-200 dark:bg-gray-800';
+    const rankSize = isTvMode ? 'text-3xl w-10' : 'text-lg w-8';
+    const nameSize = isTvMode ? 'text-base' : 'text-xs';
+    const amountSize = isTvMode ? 'text-4xl' : 'text-2xl';
+    const avatarSize = isTvMode ? 'w-9 h-9' : 'w-7 h-7';
 
-    function buildRowHtml(ent) {
-        const amount = totals[ent.id];
-        const percentage = computeBarPercentage(amount, maxTotal);
-        const imgHtml = ent.imageUrl
-            ? `<img src="${escapeHtml(ent.imageUrl)}" class="w-6 h-6 rounded-full mr-2 inline-block object-cover border border-gray-300 dark:border-gray-600">`
+    function formatAmount(amount) {
+        return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function heroRowHtml(ent, rank) {
+        const avatar = ent.imageUrl
+            ? `<img src="${escapeHtml(ent.imageUrl)}" class="${avatarSize} rounded-full object-cover border border-gray-300 dark:border-gray-700 flex-shrink-0">`
             : '';
-
-        const amountInsideBar =
-            amount > 0
-                ? `<div class="absolute inset-y-0 left-0 flex items-center ${isTvMode ? 'pl-4' : 'pl-3'} pointer-events-none">
-                   <span class="text-white font-bold ${isTvMode ? 'text-lg' : 'text-sm'} drop-shadow-md">$${amount.toFixed(2)}</span>
-               </div>`
-                : '';
-
         return `
-            <div class="relative pt-1">
-                <div class="flex mb-1 items-center justify-between">
-                    <div class="flex items-center">
-                        ${isTvMode && ent.imageUrl ? `<img src="${escapeHtml(ent.imageUrl)}" class="w-8 h-8 rounded-full mr-3 inline-block object-cover border-2 border-gray-600">` : imgHtml}
-                        <span class="font-semibold inline-block uppercase rounded-full shadow-sm ${badgeBg} ${tagPadding}">${escapeHtml(ent.namePublic)}</span>
-                    </div>
+            <div class="flex items-baseline gap-3 py-2.5 border-b border-gray-200 dark:border-gray-800 last:border-b-0 break-inside-avoid">
+                <span class="font-extrabold tabular-nums text-gray-400 dark:text-gray-500 ${rankSize} flex-shrink-0">${rank}</span>
+                ${avatar}
+                <div class="flex-1 min-w-0 flex flex-col gap-1">
+                    <span class="font-bold uppercase tracking-wide truncate ${nameSize} text-gray-900 dark:text-white">${escapeHtml(ent.namePublic)}</span>
+                    <span class="block h-[3px] w-9 rounded-full ${ent.color || 'bg-blue-500'}"></span>
                 </div>
-                <div class="relative overflow-hidden flex rounded-full ${trackBg} ${barHeight} shadow-inner">
-                    <div data-bar-fill="${percentage}" class="h-full ${ent.color || 'bg-blue-500'} transition-all duration-1000 ease-out"></div>
-                    ${amountInsideBar}
-                </div>
+                <span class="font-extrabold tabular-nums flex-shrink-0 ${amountSize} text-gray-900 dark:text-white">$${formatAmount(totals[ent.id])}</span>
             </div>`;
     }
 
-    function renderRows(list) {
-        board.innerHTML = list.map(buildRowHtml).join('');
-        // Bar widths are set via the CSSOM property setter (not a
-        // style="..." attribute in the markup above) so they work under a
-        // strict style-src CSP without 'unsafe-inline'.
-        board.querySelectorAll('[data-bar-fill]').forEach((el) => {
-            el.style.width = `${el.dataset.barFill}%`;
-        });
+    function fieldRowHtml(ent, rank) {
+        return `
+            <div class="flex items-baseline gap-2 py-1">
+                <span class="font-extrabold tabular-nums text-gray-400 dark:text-gray-500 text-xs w-6 flex-shrink-0">${rank}</span>
+                <span class="flex items-center gap-1.5 flex-1 min-w-0">
+                    <span class="inline-block w-2 h-2 rounded-full ${ent.color || 'bg-blue-500'} flex-shrink-0"></span>
+                    <span class="font-bold uppercase text-[10px] tracking-wide truncate text-gray-700 dark:text-gray-300">${escapeHtml(ent.namePublic)}</span>
+                </span>
+                <span class="font-extrabold tabular-nums flex-shrink-0 text-sm text-gray-900 dark:text-white">$${formatAmount(totals[ent.id])}</span>
+            </div>`;
     }
 
-    const tvDisplayEntities = sortedEntities.slice(0, 10);
-    renderRows(isTvMode ? tvDisplayEntities : sortedEntities);
+    const tier = pickTickerTier(sortedEntities.length);
 
-    if (!isTvMode && sortedEntities.length > 0) {
-        // Rows are already laid out (even though overflow is clipped), so
-        // measure the real rendered row height and trim to whatever
-        // actually fits instead of letting the board scroll.
-        const rowGap = parseFloat(getComputedStyle(board).rowGap) || 0;
-        const rowHeight = board.firstElementChild ? board.firstElementChild.getBoundingClientRect().height : 0;
-        const available = board.clientHeight;
-        const maxVisible = computeMaxVisibleRows(available, rowHeight, rowGap);
-
-        if (maxVisible < sortedEntities.length) {
-            renderRows(sortedEntities.slice(0, maxVisible));
-            const hiddenCount = sortedEntities.length - maxVisible;
-            overflowNote.textContent = `+ ${hiddenCount} more not shown — resize or maximize the window to see the full board`;
-            overflowNote.classList.remove('hidden');
-        } else {
-            overflowNote.classList.add('hidden');
-        }
+    if (tier === 'hero') {
+        board.innerHTML = sortedEntities.map((ent, i) => heroRowHtml(ent, i + 1)).join('');
+    } else if (tier === 'twin') {
+        board.innerHTML = `<div class="columns-2 gap-6">${sortedEntities.map((ent, i) => heroRowHtml(ent, i + 1)).join('')}</div>`;
     } else {
-        overflowNote.classList.add('hidden');
+        const spotlight = sortedEntities.slice(0, TICKER_SPOTLIGHT_SIZE);
+        const field = sortedEntities.slice(TICKER_SPOTLIGHT_SIZE).map((ent, i) => ({
+            ent,
+            rank: i + 1 + TICKER_SPOTLIGHT_SIZE,
+        }));
+        const spotlightHtml = spotlight.map((ent, i) => heroRowHtml(ent, i + 1)).join('');
+
+        let fieldSection = '';
+        if (field.length > 0) {
+            let pageItems = field;
+            let pageIndicator = '';
+            if (isTvMode) {
+                const pages = paginate(field, TICKER_TV_FIELD_PAGE_SIZE);
+                const pageIndex = pages.length > 0 ? tvFieldPage % pages.length : 0;
+                pageItems = pages[pageIndex] || [];
+                if (pages.length > 1) {
+                    pageIndicator = `<div class="flex justify-center gap-1.5 mt-3">${pages
+                        .map(
+                            (_, i) =>
+                                `<span class="w-1.5 h-1.5 rounded-full ${i === pageIndex ? 'bg-gray-400' : 'bg-gray-700'}"></span>`,
+                        )
+                        .join('')}</div>`;
+                }
+            }
+            const fieldRowsHtml = pageItems.map((item) => fieldRowHtml(item.ent, item.rank)).join('');
+            fieldSection = `
+                <div class="text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500 pt-3 mt-1 border-t border-gray-200 dark:border-gray-800 mb-2">Also competing — ${field.length} more</div>
+                <div class="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-x-4 gap-y-1">${fieldRowsHtml}</div>
+                ${pageIndicator}`;
+        }
+        board.innerHTML = spotlightHtml + fieldSection;
     }
 
     runCountdown();
+}
+
+// Advances the TV display's field-grid page every few seconds, once a
+// roster is large enough that the spotlight+field tier needed more than
+// one page (see renderApp()'s "Also competing" section). A no-op off the
+// TV display (checked on every tick, since the operator can navigate away
+// from #tv without a page reload) and while there's nothing to page
+// through. Started once from initApp() and left running for the rest of
+// the session, same pattern as countdownInterval below.
+function startTvFieldRotation() {
+    if (tvFieldRotationInterval) return;
+    tvFieldRotationInterval = setInterval(() => {
+        const isTv = window.location.hash === '#tv' || isViewerHash(window.location.hash);
+        if (!isTv || !appData) return;
+        tvFieldPage++;
+        renderApp();
+    }, 6000);
 }
 
 function initApp() {
@@ -1332,6 +1372,7 @@ function initApp() {
         }, 1000);
 
         if (!countdownInterval) countdownInterval = setInterval(runCountdown, 1000);
+        startTvFieldRotation();
     } else {
         handleAuthRedirect();
     }

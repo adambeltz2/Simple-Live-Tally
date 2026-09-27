@@ -46,12 +46,6 @@
         return [...(entities || [])].sort((a, b) => (totals[b.id] || 0) - (totals[a.id] || 0));
     }
 
-    // Percentage of a value against a track/goal, clamped to [0, 100].
-    function computeBarPercentage(amount, maxTotal) {
-        if (!maxTotal || maxTotal <= 0) return 0;
-        return Math.min((amount / maxTotal) * 100, 100);
-    }
-
     // SVG arc geometry for the goal gauge: how far along the dash array the
     // stroke should be drawn to represent totalRaised / goalAmount.
     function computeGaugeGeometry(totalRaised, goalAmount, dashArray) {
@@ -289,22 +283,46 @@
         return -currentAmount;
     }
 
-    // How many rows fit in availableHeight without scrolling, given the
-    // measured height of one row and the gap between rows. Falls back to
-    // showing everything if rowHeight can't be measured (e.g. rendered
-    // off-screen or in an environment with no real layout engine) rather
-    // than hiding entries no one asked to hide.
-    function computeMaxVisibleRows(availableHeight, rowHeight, rowGap) {
-        const gap = rowGap || 0;
-        if (!rowHeight || rowHeight <= 0) return Infinity;
-        return Math.max(1, Math.floor((availableHeight + gap) / (rowHeight + gap)));
+    // Leaderboard layout thresholds for the "Minimal Ticker" design (see the
+    // "Scoreboard Concepts" visual exploration this was picked from). A
+    // short roster gets one column of full-size rows; a medium one splits
+    // into two columns so the numbers stay large; past that only the top
+    // TICKER_SPOTLIGHT_SIZE stay large ("spotlight") and everyone else moves
+    // into a denser, wrapping grid ("field") instead of ever being hidden
+    // behind a "+N more" note.
+    const TICKER_HERO_MAX = 6;
+    const TICKER_TWIN_MAX = 12;
+    const TICKER_SPOTLIGHT_SIZE = 5;
+    // On the TV display (never scrolls, read from a distance) the field
+    // grid itself pages through TICKER_TV_FIELD_PAGE_SIZE entries at a time,
+    // auto-rotating, once a roster is large enough that no single page could
+    // show everyone at a legible size — see startTvFieldRotation() in
+    // js/app.js. The dashboard has no such cap: the operator is right at the
+    // screen, so its field grid just grows and scrolls.
+    const TICKER_TV_FIELD_PAGE_SIZE = 18;
+
+    function pickTickerTier(count) {
+        if (count <= TICKER_HERO_MAX) return 'hero';
+        if (count <= TICKER_TWIN_MAX) return 'twin';
+        return 'spotlight';
+    }
+
+    // Splits list into consecutive pages of pageSize items, preserving
+    // order. A non-positive/missing pageSize is treated as "one page with
+    // everything" rather than throwing or looping forever.
+    function paginate(list, pageSize) {
+        if (!pageSize || pageSize <= 0) return [list];
+        const pages = [];
+        for (let i = 0; i < list.length; i += pageSize) {
+            pages.push(list.slice(i, i + pageSize));
+        }
+        return pages;
     }
 
     const api = {
         escapeHtml,
         computeTotals,
         sortEntitiesByTotal,
-        computeBarPercentage,
         computeGaugeGeometry,
         isDuplicateName,
         isValidTransactionAmount,
@@ -320,7 +338,12 @@
         collapseTransactionLedger,
         computeEditDelta,
         computeDeleteAmount,
-        computeMaxVisibleRows,
+        TICKER_HERO_MAX,
+        TICKER_TWIN_MAX,
+        TICKER_SPOTLIGHT_SIZE,
+        TICKER_TV_FIELD_PAGE_SIZE,
+        pickTickerTier,
+        paginate,
     };
 
     if (typeof module !== 'undefined' && module.exports) {
