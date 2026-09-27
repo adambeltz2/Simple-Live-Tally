@@ -1069,4 +1069,49 @@ test('DOM: mobile viewport sizing', async (t) => {
             assert.equal(el.classList.contains('flex-col'), true);
         },
     );
+
+    await t.test('the Teams grid scrolls vertically with many teams instead of overflowing horizontally', () => {
+        // Regression guard for a real bug: entities-list is a CSS grid
+        // (grid-cols-1 md:grid-cols-2 xl:grid-cols-3), and each team card
+        // used `flex flex-col` with two `flex gap-2` rows of side-by-side
+        // inputs, none of them `min-w-0`. Per the CSS Grid spec, a grid
+        // item's automatic minimum width defaults to its min-content size
+        // (not 0) unless something in the chain opts out with min-w-0 — so
+        // those non-shrinking input rows forced each card, and therefore
+        // the whole grid track, wider than the viewport instead of
+        // wrapping, producing a horizontal scrollbar on the entire page
+        // with many teams registered rather than the intended vertical
+        // scroll. Asserts every card and its side-by-side row children
+        // carry min-w-0 so they can actually shrink to the grid track.
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: Array.from({ length: 12 }, (_, i) => ({
+                id: `e${i}`,
+                namePublic: `Team ${i}`,
+                namePrivate: '',
+                imageUrl: '',
+                color: 'bg-red-500',
+            })),
+        });
+        window.renderManagement();
+
+        const cards = window.document.getElementById('entities-list').children;
+        assert.equal(cards.length, 12);
+        Array.from(cards).forEach((card) => {
+            assert.equal(
+                card.classList.contains('min-w-0'),
+                true,
+                'each team card must be able to shrink below its content width',
+            );
+            card.querySelectorAll('input, select').forEach((field) => {
+                if (field.classList.contains('flex-1') || field.parentElement.classList.contains('flex')) {
+                    assert.equal(
+                        field.classList.contains('min-w-0'),
+                        true,
+                        `${field.id || field.tagName} sits in a non-wrapping flex row and must be able to shrink`,
+                    );
+                }
+            });
+        });
+    });
 });
