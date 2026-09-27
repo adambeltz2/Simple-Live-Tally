@@ -46,6 +46,20 @@
         return [...(entities || [])].sort((a, b) => (totals[b.id] || 0) - (totals[a.id] || 0));
     }
 
+    // Scales a team's amount against the leaderboard leader's amount, for
+    // the small per-team color bar in the "Minimal Ticker" leaderboard (see
+    // heroRowHtml/fieldRowHtml in js/app.js) — the bar's length itself shows
+    // how far ahead or behind a team is, rather than every team getting an
+    // identical fixed-width tick regardless of standing. minPercent (default
+    // 4) floors the bar so a $0 (or very small) team's bar stays visible
+    // rather than shrinking to nothing, and also applies uniformly when
+    // maxAmount is 0 (nobody's raised anything yet).
+    function computeRelativeBarPercent(amount, maxAmount, minPercent) {
+        const floor = minPercent === undefined ? 4 : minPercent;
+        if (!maxAmount || maxAmount <= 0) return floor;
+        return Math.max(floor, Math.min(100, ((amount || 0) / maxAmount) * 100));
+    }
+
     // Sentinel entityId for a transaction that counts toward the event's
     // overall total/goal but isn't tied to any team — e.g. a general
     // "Donation" that shouldn't influence team rankings. Not a real entity
@@ -367,6 +381,7 @@
         escapeHtml,
         computeTotals,
         sortEntitiesByTotal,
+        computeRelativeBarPercent,
         GENERAL_FUND_ID,
         isGeneralFundEntry,
         computeEventTotal,

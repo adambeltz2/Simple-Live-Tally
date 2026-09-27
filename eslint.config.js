@@ -9,6 +9,7 @@ const logicGlobals = {
     escapeHtml: 'readonly',
     computeTotals: 'readonly',
     sortEntitiesByTotal: 'readonly',
+    computeRelativeBarPercent: 'readonly',
     GENERAL_FUND_ID: 'readonly',
     isGeneralFundEntry: 'readonly',
     computeEventTotal: 'readonly',

@@ -70,7 +70,7 @@ Each device signs in independently and keeps its own token in its own browser's 
 
 ## Reading the Leaderboard at Any Size
 
-The team ranking is a typographic ticker — a rank number, the team name with a small color tick, and a large tabular-numeral dollar amount — rather than a bar chart, so it stays legible whether an event has 3 teams or 30. It renders in one of three density tiers, picked automatically from the team count:
+The team ranking is a typographic ticker — a rank number, the team name with a small color bar, and a large tabular-numeral dollar amount — rather than a bar chart, so it stays legible whether an event has 3 teams or 30. That color bar isn't just a fixed-width identity tick: its length is scaled against the leader's total, so a glance at the board shows how far ahead or behind a team actually is, not just the raw numbers. It renders in one of three density tiers, picked automatically from the team count:
 
 * **Up to 6 teams** — a single column of full-size rows.
 * **7–12 teams** — two columns of the same full-size rows, so the numbers stay just as large.
@@ -88,7 +88,7 @@ The Live Dashboard's field grid (13+ teams) simply grows and scrolls, since the 
 * **Optimistic UI Zero-Latency Updates:** Submitting transactions updates the live dashboard instantly without network delay, managing data syncs quietly in the background for a perfectly smooth operator experience.
 * **Strict Uniqueness Validation:** Prevents duplicate public team names during creation and modification processes.
 * **Scrolling Top Leaders Ticker:** An animated marquee ticker in the header showcases the top 1-N frontrunners continuously.
-* **Live Dashboard & Leaderboard:** Automatically polls Dropbox every 60 seconds to update totals and re-sort leaders dynamically. The ranking itself is a distance-legible ticker, not a bar chart: big tabular numbers and a small per-team color tick, laid out in three density tiers so it scales from a handful of teams up to dozens without ever shrinking below legible or hiding anyone behind a "+N more" note — see [Reading the Leaderboard at Any Size](#reading-the-leaderboard-at-any-size) below.
+* **Live Dashboard & Leaderboard:** Automatically polls Dropbox every 60 seconds to update totals and re-sort leaders dynamically. The ranking itself is a distance-legible ticker, not a bar chart: big tabular numbers and a small per-team color bar scaled to how far ahead or behind the leader a team is, laid out in three density tiers so it scales from a handful of teams up to dozens without ever shrinking below legible or hiding anyone behind a "+N more" note — see [Reading the Leaderboard at Any Size](#reading-the-leaderboard-at-any-size) below.
 * **Dynamic Event Goals:** Set a financial goal per event and watch a live progress bar (`$raised of $goal · N% to goal`) update in real time.
 * **General Fund Donations:** The "Add Transaction" entity field includes a "💝 Donation (no team — General Fund)" option — use it for gifts that should count toward the event's overall total/goal without affecting any team's ranking on the leaderboard.
 * **Type-to-Search Team Picker:** The "Add Transaction" entity field is a searchable text field, not a long dropdown — type a few letters of a team's name (or "Donation" for the General Fund) instead of scrolling, which matters once a roster has more than a handful of teams.

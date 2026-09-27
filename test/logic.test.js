@@ -7,6 +7,7 @@ const {
     GENERAL_FUND_ID,
     isGeneralFundEntry,
     computeEventTotal,
+    computeRelativeBarPercent,
     GENERAL_FUND_LABEL,
     resolveEntitySelection,
     resolveThemeColor,
@@ -193,6 +194,34 @@ test('sortEntitiesByTotal', async (t) => {
         const entities = [{ id: 'a' }, { id: 'b' }];
         const sorted = sortEntitiesByTotal(entities, {});
         assert.equal(sorted.length, 2);
+    });
+});
+
+test('computeRelativeBarPercent', async (t) => {
+    await t.test("scales an amount against the leader's amount", () => {
+        assert.equal(computeRelativeBarPercent(50, 100), 50);
+        assert.equal(computeRelativeBarPercent(100, 100), 100);
+        assert.equal(computeRelativeBarPercent(25, 100), 25);
+    });
+
+    await t.test('never exceeds 100%, even if amount somehow exceeds the leader', () => {
+        assert.equal(computeRelativeBarPercent(150, 100), 100);
+    });
+
+    await t.test('floors a $0 (or very small) team at the minimum instead of a zero-width bar', () => {
+        assert.equal(computeRelativeBarPercent(0, 100), 4);
+        assert.equal(computeRelativeBarPercent(1, 10000), 4);
+    });
+
+    await t.test('applies the floor uniformly when the leader has 0 (nobody has raised anything yet)', () => {
+        assert.equal(computeRelativeBarPercent(0, 0), 4);
+        assert.equal(computeRelativeBarPercent(0, null), 4);
+        assert.equal(computeRelativeBarPercent(0, undefined), 4);
+    });
+
+    await t.test('accepts a custom floor', () => {
+        assert.equal(computeRelativeBarPercent(0, 100, 10), 10);
+        assert.equal(computeRelativeBarPercent(0, 0, 0), 0);
     });
 });
 

@@ -220,6 +220,38 @@ test('DOM: dashboard rendering', async (t) => {
         assert.match(board.innerHTML, /\$75\.00/, 'Team A total should be 50 + 25');
     });
 
+    await t.test('the leaderboard subtitle is just the active event name, no "Active Event:" label', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            events: [{ id: 'evt1', name: 'Soup & Chili Cook off', goalAmount: null, startDate: '', endDate: '' }],
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+
+        window.renderApp();
+
+        assert.equal(window.document.getElementById('leaderboard-subtitle').innerText, 'Soup & Chili Cook off');
+    });
+
+    await t.test("each row's color bar scales with standing, not a fixed-width tick for everyone", () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: [
+                { id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' },
+                { id: 'e2', namePublic: 'Team B', namePrivate: '', imageUrl: '', color: 'bg-blue-500' },
+            ],
+        });
+        window.transactionEntries = [
+            baseEntry({ id: 't1', logicalId: 't1', entityId: 'e1', eventId: 'evt1', amount: 100 }),
+            baseEntry({ id: 't2', logicalId: 't2', entityId: 'e2', eventId: 'evt1', amount: 25 }),
+        ];
+
+        window.renderApp();
+
+        const board = window.document.getElementById('leaderboard');
+        assert.match(board.innerHTML, /width: 100%/, "the leader's bar should be full width");
+        assert.match(board.innerHTML, /width: 25%/, "a team at 1/4 the leader's total should show a 1/4-width bar");
+    });
+
     await t.test('a General Fund donation counts toward the goal total but not any team leaderboard row', () => {
         const window = loadApp();
         window.appData = baseAppData({

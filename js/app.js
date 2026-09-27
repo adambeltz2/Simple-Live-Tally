@@ -103,6 +103,21 @@ function themeColorOptionsHtml(selected) {
     return useDefault + opts;
 }
 
+// index.html's CSP has no 'unsafe-inline' in style-src, which blocks
+// HTML-parsed `style="..."` attributes — including ones built into an
+// `innerHTML` string. The browser drops them silently (no thrown error,
+// only a console warning), so a bar meant to render at e.g. 25% width
+// instead renders at its element's plain natural/track width. CSP's
+// style-src does NOT restrict a script-driven `.style.width = ...`
+// assignment, though, so every dynamically-sized bar is rendered with
+// `data-bar-pct="<value>"` instead of an inline style, and this applies
+// the real width immediately after that markup is inserted.
+function applyBarWidths(container) {
+    container.querySelectorAll('[data-bar-pct]').forEach((el) => {
+        el.style.width = `${el.dataset.barPct}%`;
+    });
+}
+
 // --- DARK MODE LOGIC ---
 // TV/viewer displays default to dark (legible on a projector or large screen
 // from a distance) until this device's operator explicitly picks a theme
@@ -1192,8 +1207,7 @@ function renderApp() {
         }
         eventSelect.appendChild(opt);
     });
-    document.getElementById('leaderboard-subtitle').innerText =
-        `Active Event: ${activeEvent ? activeEvent.name : 'Unknown'}`;
+    document.getElementById('leaderboard-subtitle').innerText = activeEvent ? activeEvent.name : '';
 
     // #entity-select is a plain text <input> backed by the #entity-options
     // <datalist> below (type-to-search — far faster than scrolling a
@@ -1273,10 +1287,11 @@ function renderApp() {
                     <span class="${labelColor}">of $${goalAmount.toLocaleString()} · ${Math.round(percentage)}% to goal</span>
                 </div>
                 <div class="w-full h-1.5 rounded-full ${trackColor} overflow-hidden">
-                    <div class="h-full rounded-full ${fillColor} transition-all duration-1000 ease-out" style="width: ${percentage}%"></div>
+                    <div class="h-full rounded-full ${fillColor} transition-all duration-1000 ease-out" data-bar-pct="${percentage}"></div>
                 </div>
             </div>
         `;
+        applyBarWidths(gaugeContainer);
         gaugeContainer.classList.remove('hidden');
     } else {
         gaugeContainer.innerHTML = '';
@@ -1306,30 +1321,41 @@ function renderApp() {
         return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
+    // sortedEntities is already highest-total-first, so its first entry
+    // (if any) holds the leader's amount every other row's bar scales
+    // against — see computeRelativeBarPercent() in js/logic.js.
+    const leaderAmount = sortedEntities.length > 0 ? totals[sortedEntities[0].id] || 0 : 0;
+
     function heroRowHtml(ent, rank) {
         const avatar = ent.imageUrl
             ? `<img src="${escapeHtml(ent.imageUrl)}" class="${avatarSize} rounded-full object-cover border border-gray-300 dark:border-gray-700 flex-shrink-0">`
             : '';
+        const barPct = computeRelativeBarPercent(totals[ent.id], leaderAmount);
         return `
             <div class="flex items-baseline gap-3 py-2.5 border-b border-gray-200 dark:border-gray-800 last:border-b-0 break-inside-avoid">
                 <span class="font-extrabold tabular-nums text-gray-400 dark:text-gray-500 ${rankSize} flex-shrink-0">${rank}</span>
                 ${avatar}
                 <div class="flex-1 min-w-0 flex flex-col gap-1">
                     <span class="font-bold uppercase tracking-wide truncate ${nameSize} text-gray-900 dark:text-white">${escapeHtml(ent.namePublic)}</span>
-                    <span class="block h-[3px] w-9 rounded-full ${ent.color || 'bg-blue-500'}"></span>
+                    <div class="h-[3px] w-24 max-w-full rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden">
+                        <div class="h-full rounded-full ${ent.color || 'bg-blue-500'} transition-all duration-700 ease-out" data-bar-pct="${barPct}"></div>
+                    </div>
                 </div>
                 <span class="font-extrabold tabular-nums flex-shrink-0 ${amountSize} text-gray-900 dark:text-white">$${formatAmount(totals[ent.id])}</span>
             </div>`;
     }
 
     function fieldRowHtml(ent, rank) {
+        const barPct = computeRelativeBarPercent(totals[ent.id], leaderAmount);
         return `
             <div class="flex items-baseline gap-2 py-1">
                 <span class="font-extrabold tabular-nums text-gray-400 dark:text-gray-500 text-xs w-6 flex-shrink-0">${rank}</span>
-                <span class="flex items-center gap-1.5 flex-1 min-w-0">
-                    <span class="inline-block w-2 h-2 rounded-full ${ent.color || 'bg-blue-500'} flex-shrink-0"></span>
+                <div class="flex items-center gap-1.5 flex-1 min-w-0">
+                    <div class="w-6 h-[3px] rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden flex-shrink-0">
+                        <div class="h-full rounded-full ${ent.color || 'bg-blue-500'}" data-bar-pct="${barPct}"></div>
+                    </div>
                     <span class="font-bold uppercase text-[10px] tracking-wide truncate text-gray-700 dark:text-gray-300">${escapeHtml(ent.namePublic)}</span>
-                </span>
+                </div>
                 <span class="font-extrabold tabular-nums flex-shrink-0 text-sm text-gray-900 dark:text-white">$${formatAmount(totals[ent.id])}</span>
             </div>`;
     }
@@ -1377,6 +1403,7 @@ function renderApp() {
         }
         board.innerHTML = spotlightHtml + fieldSection;
     }
+    applyBarWidths(board);
 
     runCountdown();
 }
