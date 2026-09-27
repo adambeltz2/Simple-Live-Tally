@@ -98,7 +98,8 @@
     // only needs to show the live leaderboard, never add/edit data. Reuses
     // the exact same #tv styling (see checkViewMode() in js/app.js); the
     // only functional difference is the restricted OAuth scope requested
-    // when signing in (see buildDropboxAuthUrl below).
+    // when signing in (see the active storage provider's viewerScope, e.g.
+    // js/providers/dropbox.js).
     const VIEWER_HASH = '#tv-viewer';
 
     function isViewerHash(hash) {
@@ -116,23 +117,6 @@
 
     function isKeyerHash(hash) {
         return hash === KEYER_HASH;
-    }
-
-    // Builds the Dropbox /oauth2/authorize URL. `scope`, when given, narrows
-    // the requested permissions to a space-delimited scope list (used for
-    // the read-only viewer flow); omitted entirely for the normal admin/
-    // keyer flow, which keeps requesting whatever scopes are enabled in the
-    // Dropbox App Console rather than restricting them here.
-    function buildDropboxAuthUrl({ clientId, codeChallenge, redirectUri, scope }) {
-        // token_access_type=offline requests a refresh_token alongside the
-        // short-lived access token, so the app can renew silently instead
-        // of forcing operators to re-authenticate mid-event.
-        let url =
-            `https://www.dropbox.com/oauth2/authorize?client_id=${clientId}&response_type=code` +
-            `&code_challenge=${codeChallenge}&code_challenge_method=S256` +
-            `&redirect_uri=${encodeURIComponent(redirectUri)}&token_access_type=offline`;
-        if (scope) url += `&scope=${encodeURIComponent(scope)}`;
-        return url;
     }
 
     // Exponential backoff delay (ms) for retrying a save after a 409
@@ -331,7 +315,6 @@
         isViewerHash,
         KEYER_HASH,
         isKeyerHash,
-        buildDropboxAuthUrl,
         computeRetryDelay,
         runUpdateWithRetry,
         flushPendingQueue,
