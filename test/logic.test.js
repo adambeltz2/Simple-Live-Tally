@@ -4,6 +4,14 @@ const {
     escapeHtml,
     computeTotals,
     sortEntitiesByTotal,
+    GENERAL_FUND_ID,
+    isGeneralFundEntry,
+    computeEventTotal,
+    computeRelativeBarPercent,
+    GENERAL_FUND_LABEL,
+    resolveEntitySelection,
+    resolveThemeColor,
+    resolveLogoUrl,
     computeGaugeGeometry,
     isDuplicateName,
     isValidTransactionAmount,
@@ -87,6 +95,78 @@ test('computeTotals', async (t) => {
         assert.deepEqual(computeTotals([], [], 'evt1'), {});
         assert.deepEqual(computeTotals(undefined, undefined, 'evt1'), {});
     });
+
+    await t.test('excludes General Fund donations from per-entity totals', () => {
+        const transactions = [
+            { entityId: 'e1', eventId: 'evt1', amount: 10 },
+            { entityId: GENERAL_FUND_ID, eventId: 'evt1', amount: 250 },
+        ];
+        const totals = computeTotals(entities, transactions, 'evt1');
+        assert.deepEqual(totals, { e1: 10, e2: 0 });
+    });
+});
+
+test('isGeneralFundEntry', async (t) => {
+    await t.test('identifies the General Fund sentinel and nothing else', () => {
+        assert.equal(isGeneralFundEntry(GENERAL_FUND_ID), true);
+        assert.equal(isGeneralFundEntry('e1'), false);
+        assert.equal(isGeneralFundEntry(undefined), false);
+        assert.equal(isGeneralFundEntry(null), false);
+    });
+});
+
+test('computeEventTotal', async (t) => {
+    await t.test('sums every transaction for the event, team-tied and General Fund alike', () => {
+        const transactions = [
+            { entityId: 'e1', eventId: 'evt1', amount: 10 },
+            { entityId: 'e2', eventId: 'evt1', amount: 5 },
+            { entityId: GENERAL_FUND_ID, eventId: 'evt1', amount: 250 },
+            { entityId: 'e1', eventId: 'evt2', amount: 999 }, // different event, excluded
+        ];
+        assert.equal(computeEventTotal(transactions, 'evt1'), 265);
+    });
+
+    await t.test('handles missing/empty inputs', () => {
+        assert.equal(computeEventTotal([], 'evt1'), 0);
+        assert.equal(computeEventTotal(undefined, 'evt1'), 0);
+    });
+});
+
+test('resolveEntitySelection', async (t) => {
+    const entities = [
+        { id: 'e1', namePublic: 'Team A' },
+        { id: 'e2', namePublic: 'Team B' },
+    ];
+
+    await t.test('resolves an exact team name match to its id', () => {
+        assert.equal(resolveEntitySelection(entities, 'Team A'), 'e1');
+        assert.equal(resolveEntitySelection(entities, 'Team B'), 'e2');
+    });
+
+    await t.test('trims surrounding whitespace before matching', () => {
+        assert.equal(resolveEntitySelection(entities, '  Team A  '), 'e1');
+    });
+
+    await t.test('resolves the General Fund label to GENERAL_FUND_ID', () => {
+        assert.equal(resolveEntitySelection(entities, GENERAL_FUND_LABEL), GENERAL_FUND_ID);
+    });
+
+    await t.test('returns null for an unfinished/unmatched search and empty input', () => {
+        assert.equal(resolveEntitySelection(entities, 'Team'), null, 'a partial, in-progress search must not match');
+        assert.equal(resolveEntitySelection(entities, 'Nonexistent Team'), null);
+        assert.equal(resolveEntitySelection(entities, ''), null);
+        assert.equal(resolveEntitySelection(entities, '   '), null);
+        assert.equal(resolveEntitySelection(entities, undefined), null);
+    });
+
+    await t.test('is case-sensitive (matches namePublic exactly, as the datalist renders it)', () => {
+        assert.equal(resolveEntitySelection(entities, 'team a'), null);
+    });
+
+    await t.test('handles an empty entities list', () => {
+        assert.equal(resolveEntitySelection([], 'Team A'), null);
+        assert.equal(resolveEntitySelection(undefined, 'Team A'), null);
+    });
 });
 
 test('sortEntitiesByTotal', async (t) => {
@@ -114,6 +194,74 @@ test('sortEntitiesByTotal', async (t) => {
         const entities = [{ id: 'a' }, { id: 'b' }];
         const sorted = sortEntitiesByTotal(entities, {});
         assert.equal(sorted.length, 2);
+    });
+});
+
+test('computeRelativeBarPercent', async (t) => {
+    await t.test("scales an amount against the leader's amount", () => {
+        assert.equal(computeRelativeBarPercent(50, 100), 50);
+        assert.equal(computeRelativeBarPercent(100, 100), 100);
+        assert.equal(computeRelativeBarPercent(25, 100), 25);
+    });
+
+    await t.test('never exceeds 100%, even if amount somehow exceeds the leader', () => {
+        assert.equal(computeRelativeBarPercent(150, 100), 100);
+    });
+
+    await t.test('floors a $0 (or very small) team at the minimum instead of a zero-width bar', () => {
+        assert.equal(computeRelativeBarPercent(0, 100), 4);
+        assert.equal(computeRelativeBarPercent(1, 10000), 4);
+    });
+
+    await t.test('applies the floor uniformly when the leader has 0 (nobody has raised anything yet)', () => {
+        assert.equal(computeRelativeBarPercent(0, 0), 4);
+        assert.equal(computeRelativeBarPercent(0, null), 4);
+        assert.equal(computeRelativeBarPercent(0, undefined), 4);
+    });
+
+    await t.test('accepts a custom floor', () => {
+        assert.equal(computeRelativeBarPercent(0, 100, 10), 10);
+        assert.equal(computeRelativeBarPercent(0, 0, 0), 0);
+    });
+});
+
+test('resolveThemeColor', async (t) => {
+    await t.test("uses the active event's own themeColor when set", () => {
+        const settings = { themeColor: 'bg-blue-600' };
+        const activeEvent = { themeColor: 'bg-red-600' };
+        assert.equal(resolveThemeColor(settings, activeEvent), 'bg-red-600');
+    });
+
+    await t.test('falls back to Settings when the event has no override', () => {
+        const settings = { themeColor: 'bg-purple-600' };
+        assert.equal(resolveThemeColor(settings, { themeColor: '' }), 'bg-purple-600');
+        assert.equal(resolveThemeColor(settings, {}), 'bg-purple-600');
+        assert.equal(resolveThemeColor(settings, null), 'bg-purple-600');
+    });
+
+    await t.test('falls back to the hardcoded default when nothing is set', () => {
+        assert.equal(resolveThemeColor({}, {}), 'bg-blue-600');
+        assert.equal(resolveThemeColor(null, null), 'bg-blue-600');
+    });
+});
+
+test('resolveLogoUrl', async (t) => {
+    await t.test("uses the active event's own logoUrl when set", () => {
+        const settings = { logoUrl: 'https://example.com/app-logo.png' };
+        const activeEvent = { logoUrl: 'https://example.com/event-logo.png' };
+        assert.equal(resolveLogoUrl(settings, activeEvent), 'https://example.com/event-logo.png');
+    });
+
+    await t.test('falls back to Settings when the event has no override', () => {
+        const settings = { logoUrl: 'https://example.com/app-logo.png' };
+        assert.equal(resolveLogoUrl(settings, { logoUrl: '' }), 'https://example.com/app-logo.png');
+        assert.equal(resolveLogoUrl(settings, {}), 'https://example.com/app-logo.png');
+        assert.equal(resolveLogoUrl(settings, null), 'https://example.com/app-logo.png');
+    });
+
+    await t.test('falls back to an empty string when nothing is set', () => {
+        assert.equal(resolveLogoUrl({}, {}), '');
+        assert.equal(resolveLogoUrl(null, null), '');
     });
 });
 

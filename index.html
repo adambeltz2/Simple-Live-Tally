@@ -26,6 +26,14 @@
 </head>
 <body id="body" class="bg-gray-100 dark:bg-gray-950 text-gray-800 dark:text-gray-100 font-sans transition-colors duration-300 h-dvh overflow-hidden flex flex-col">
 
+    <!-- TV/viewer display theme toggle — only shown in #tv / #tv-viewer mode,
+         where the regular header (and its dark-mode-toggle button) is
+         hidden, so this device can still pick light vs. dark independently
+         of whatever an admin device last chose. -->
+    <button id="tv-theme-toggle" class="hidden fixed top-3 right-3 z-50 p-2 rounded-full bg-black/10 hover:bg-black/20 dark:bg-white/10 dark:hover:bg-white/20 text-gray-700 dark:text-white transition-colors" title="Toggle Light/Dark Mode">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+    </button>
+
     <!-- Viewport bounded container -->
     <div id="main-container" class="max-w-5xl mx-auto my-4 flex-1 min-h-0 w-full bg-white dark:bg-gray-900 rounded-lg shadow-lg overflow-hidden transition-all duration-300 flex flex-col">
         
@@ -40,6 +48,7 @@
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
                 </button>
                 <div id="status" class="text-sm opacity-90 bg-black/20 px-2 py-1 rounded hidden md:block">Not authenticated</div>
+                <button id="disconnect-btn" class="hidden text-sm bg-black/20 hover:bg-black/40 px-2 py-1 rounded font-semibold transition-colors" title="Disconnect from Dropbox and sign in again — use this to force a full refresh or switch accounts">Disconnect</button>
                 <button id="pending-writes-indicator" class="hidden text-sm bg-yellow-500 text-gray-900 px-2 py-1 rounded font-semibold hover:bg-yellow-400 transition-colors" title="Click to retry now"></button>
                 <a href="#tv" target="_blank" class="text-sm bg-white text-gray-900 hover:bg-gray-200 font-semibold py-1 px-3 rounded inline-flex items-center shadow-sm">
                     <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
@@ -91,7 +100,8 @@
                     <div class="flex flex-wrap gap-4 items-end">
                         <div class="flex-1 min-w-[200px]">
                             <label class="block text-sm font-medium mb-1 opacity-90">Entity</label>
-                            <select id="entity-select" class="w-full p-2.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner bg-white dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"></select>
+                            <input type="text" id="entity-select" list="entity-options" autocomplete="off" placeholder="Type to search teams…" class="w-full p-2.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner bg-white dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none">
+                            <datalist id="entity-options"></datalist>
                         </div>
                         <div class="flex-1 min-w-[150px]">
                             <label class="block text-sm font-medium mb-1 opacity-90">Amount ($)</label>
@@ -192,7 +202,7 @@
                             <button id="add-entity-btn" class="w-full bg-blue-600 text-white font-semibold py-2 rounded text-sm hover:opacity-90">Add Entity</button>
                         </div>
 
-                        <div id="entities-list" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+                        <div id="entities-list" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4"></div>
                     </div>
 
                     <!-- PANE: Events -->
@@ -205,10 +215,21 @@
                                 <div class="flex-1 min-w-[160px]"><label class="text-xs text-gray-500">Start (Opt)</label><input type="datetime-local" id="new-event-start" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner text-xs bg-white dark:bg-gray-700"></div>
                                 <div class="flex-1 min-w-[160px]"><label class="text-xs text-gray-500">End (Opt)</label><input type="datetime-local" id="new-event-end" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner text-xs bg-white dark:bg-gray-700"></div>
                             </div>
+                            <div class="flex gap-2 mb-2">
+                                <input type="url" id="new-event-logo" placeholder="Event Logo URL (Optional)" class="min-w-0 flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-sm shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+                                <select id="new-event-color" class="min-w-0 flex-shrink-0 p-2 border border-gray-400 dark:border-gray-600 rounded text-sm shadow-inner bg-white dark:bg-gray-700 outline-none" title="Event Theme Color">
+                                    <option value="" selected>Use App Default</option>
+                                    <option value="bg-blue-600">Blue</option>
+                                    <option value="bg-red-600">Red</option>
+                                    <option value="bg-green-600">Green</option>
+                                    <option value="bg-purple-600">Purple</option>
+                                    <option value="bg-gray-900">Dark Gray</option>
+                                </select>
+                            </div>
                             <button id="add-event-btn" class="w-full bg-blue-600 text-white font-semibold py-2 rounded text-sm hover:opacity-90">Add Event</button>
                         </div>
 
-                        <div id="events-list" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+                        <div id="events-list" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4"></div>
                     </div>
 
                     <!-- PANE: Transactions -->
@@ -228,7 +249,7 @@
 
     <!-- Footer -->
     <footer id="main-footer" class="flex-shrink-0 text-center text-sm text-gray-500 py-4 mt-auto">
-        <p class="font-medium">Simple Live Tally <span class="font-bold">v2.1.2</span></p>
+        <p class="font-medium">Simple Live Tally <span class="font-bold">v2.3.2</span></p>
         <p class="mt-1 space-x-2">
             <a href="https://github.com/adambeltz2/Simple-Live-Tally" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">GitHub</a>
             <span>|</span>

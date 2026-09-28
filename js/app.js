@@ -83,26 +83,72 @@ const colors = [
     'bg-orange-500',
 ];
 
+// Same palette offered by the Settings > Theme Color select (index.html),
+// reused here to build each event's own theme-color <select> — see
+// resolveThemeColor() in js/logic.js for how an event's choice (or leaving
+// it on "Use App Default") is applied.
+const THEME_COLOR_OPTIONS = [
+    { value: 'bg-blue-600', label: 'Blue' },
+    { value: 'bg-red-600', label: 'Red' },
+    { value: 'bg-green-600', label: 'Green' },
+    { value: 'bg-purple-600', label: 'Purple' },
+    { value: 'bg-gray-900', label: 'Dark Gray' },
+];
+
+function themeColorOptionsHtml(selected) {
+    const useDefault = `<option value="" ${!selected ? 'selected' : ''}>Use App Default</option>`;
+    const opts = THEME_COLOR_OPTIONS.map(
+        (c) => `<option value="${c.value}" ${selected === c.value ? 'selected' : ''}>${c.label}</option>`,
+    ).join('');
+    return useDefault + opts;
+}
+
+// index.html's CSP has no 'unsafe-inline' in style-src, which blocks
+// HTML-parsed `style="..."` attributes — including ones built into an
+// `innerHTML` string. The browser drops them silently (no thrown error,
+// only a console warning), so a bar meant to render at e.g. 25% width
+// instead renders at its element's plain natural/track width. CSP's
+// style-src does NOT restrict a script-driven `.style.width = ...`
+// assignment, though, so every dynamically-sized bar is rendered with
+// `data-bar-pct="<value>"` instead of an inline style, and this applies
+// the real width immediately after that markup is inserted.
+function applyBarWidths(container) {
+    container.querySelectorAll('[data-bar-pct]').forEach((el) => {
+        el.style.width = `${el.dataset.barPct}%`;
+    });
+}
+
 // --- DARK MODE LOGIC ---
+// TV/viewer displays default to dark (legible on a projector or large screen
+// from a distance) until this device's operator explicitly picks a theme
+// with the toggle; every other view defaults to light. Once a preference is
+// stored, it wins regardless of mode — the default only applies the first
+// time a given browser opens the page.
 function initTheme() {
-    if (window.location.hash === '#tv') return;
-    const isDark = window.localStorage.getItem('darkMode') === 'true';
-    if (isDark) {
-        document.documentElement.classList.add('dark');
-    } else {
-        document.documentElement.classList.remove('dark');
-    }
+    const stored = window.localStorage.getItem('darkMode');
+    const isTvDisplay = window.location.hash === '#tv' || isViewerHash(window.location.hash);
+    const isDark = stored === null ? isTvDisplay : stored === 'true';
+    document.documentElement.classList.toggle('dark', isDark);
 }
 function toggleDarkMode() {
     document.documentElement.classList.toggle('dark');
     window.localStorage.setItem('darkMode', document.documentElement.classList.contains('dark'));
+    if (appData) renderApp();
 }
 initTheme();
 
 // --- VIEW MODE MANAGEMENT ---
+// The active event, or undefined if none is set/found — a single lookup
+// used everywhere branding (resolveThemeColor/resolveLogoUrl) or other
+// per-event rendering needs "the event currently on screen."
+function getActiveEvent() {
+    if (!appData) return undefined;
+    return appData.events.find((e) => e.id === appData.activeEventId);
+}
+
 function applyThemeColor() {
     if (!appData || !appData.settings) return;
-    const theme = appData.settings.themeColor || 'bg-blue-600';
+    const theme = resolveThemeColor(appData.settings, getActiveEvent());
 
     const header = document.getElementById('main-header');
     header.className = header.className.replace(/bg-(blue|red|green|purple|gray)-\d+/, theme);
@@ -129,6 +175,14 @@ function applyThemeColor() {
 function switchTab(tab) {
     document.getElementById('view-dashboard').classList.toggle('hidden', tab !== 'dashboard');
     document.getElementById('view-management').classList.toggle('hidden', tab !== 'management');
+    // Data Management (team/event grids, transaction list) benefits from
+    // using most of the viewport on a wide screen; the Live Dashboard stays
+    // at the narrower reading width it was designed around. TV/viewer mode
+    // (checkViewMode) always calls switchTab('dashboard') before applying
+    // its own max-w-full override, so this never fights that.
+    const container = document.getElementById('main-container');
+    container.classList.toggle('max-w-5xl', tab !== 'management');
+    container.classList.toggle('max-w-[1800px]', tab === 'management');
     applyThemeColor();
     if (tab === 'management') {
         renderManagement();
@@ -164,14 +218,21 @@ function checkViewMode() {
     const adminControls = document.getElementById('admin-controls');
     const title = document.getElementById('leaderboard-title');
     const subtitle = document.getElementById('leaderboard-subtitle');
-    const leaderboardHeader = document.getElementById('leaderboard-header');
     const countdownDisplay = document.getElementById('event-countdown');
     const tvLogo = document.getElementById('tv-logo');
     const footer = document.getElementById('main-footer');
+    const tvThemeToggle = document.getElementById('tv-theme-toggle');
 
+    // The border/subtitle colors below are left to the leaderboard-header's
+    // and subtitle's own `dark:` Tailwind classes in index.html rather than
+    // forced here — TV mode used to hardcode the dark-theme color literally
+    // (not as a dark: variant), which meant it could never actually go
+    // light. initTheme() (called in both branches below) is what decides
+    // light vs. dark now, same as every other view.
     if (isTvMode) {
         switchTab('dashboard');
-        document.documentElement.classList.add('dark');
+        initTheme();
+        tvThemeToggle.classList.remove('hidden');
 
         container.classList.replace('max-w-5xl', 'max-w-full');
         container.classList.replace('my-4', 'my-0');
@@ -182,20 +243,20 @@ function checkViewMode() {
         nav.classList.add('hidden');
         adminControls.classList.add('hidden');
         footer.classList.add('hidden');
-        leaderboardHeader.classList.replace('border-gray-200', 'border-gray-800');
 
         title.classList.replace('text-xl', 'text-4xl');
-        subtitle.classList.replace('text-gray-500', 'text-gray-400');
         subtitle.classList.add('text-xl', 'mt-1');
 
         countdownDisplay.classList.replace('text-sm', 'text-2xl');
 
-        if (appData && appData.settings && appData.settings.logoUrl) {
-            tvLogo.src = appData.settings.logoUrl;
+        const tvLogoUrl = appData && appData.settings ? resolveLogoUrl(appData.settings, getActiveEvent()) : '';
+        if (tvLogoUrl) {
+            tvLogo.src = tvLogoUrl;
             tvLogo.classList.remove('hidden');
         }
     } else {
         initTheme();
+        tvThemeToggle.classList.add('hidden');
 
         container.classList.replace('max-w-full', 'max-w-5xl');
         container.classList.replace('my-0', 'my-4');
@@ -204,10 +265,8 @@ function checkViewMode() {
 
         header.classList.remove('hidden');
         footer.classList.remove('hidden');
-        leaderboardHeader.classList.replace('border-gray-800', 'border-gray-200');
 
         title.classList.replace('text-4xl', 'text-xl');
-        subtitle.classList.replace('text-gray-400', 'text-gray-500');
         subtitle.classList.remove('text-xl', 'mt-1');
 
         countdownDisplay.classList.replace('text-2xl', 'text-sm');
@@ -327,13 +386,40 @@ async function authFetch(url, buildOptions) {
     return response;
 }
 
+// A plain wrapper around window.location.reload(), used everywhere the app
+// needs to reload the page. jsdom's Location object doesn't allow
+// window.location.reload to be reassigned (it silently no-ops rather than
+// throwing), so tests can't stub the real thing directly — they stub this
+// instead.
+function reloadPage() {
+    window.location.reload();
+}
+
 function handleAuthFailure() {
     window.localStorage.removeItem('dropbox_token');
     window.localStorage.removeItem('dropbox_refresh_token');
     accessToken = null;
     if (countdownInterval) clearInterval(countdownInterval);
     alert('Your Dropbox session has expired or the token is invalid. Please sign in again.');
-    window.location.reload();
+    reloadPage();
+}
+
+// A deliberate, operator-initiated disconnect — distinct from
+// handleAuthFailure(), which fires on an unexpected 401 and alerts the
+// user their session expired. This is the "force a full refresh, or sign
+// in as someone else" escape hatch: there was previously no way to drop
+// the cached Dropbox token short of clearing browser storage by hand.
+function disconnectDropbox() {
+    if (
+        !confirm(
+            'Disconnect from Dropbox? You will need to sign in again to view or edit this event. Nothing stored in Dropbox is affected.',
+        )
+    ) {
+        return;
+    }
+    window.localStorage.removeItem('dropbox_token');
+    window.localStorage.removeItem('dropbox_refresh_token');
+    reloadPage();
 }
 
 // --- CONFIG STORAGE (settings/events/entities — still one shared file
@@ -529,6 +615,7 @@ async function exportDataZip() {
         summary.events[event.id] = {
             name: event.name,
             totals: computeTotals(appData.entities, entries, event.id),
+            eventTotal: computeEventTotal(entries, event.id),
             transactions: collapseTransactionLedger(entries),
         };
     }
@@ -670,10 +757,13 @@ function addEvent() {
     const startDate = document.getElementById('new-event-start').value;
     const endDate = document.getElementById('new-event-end').value;
     const goalAmount = parseFloat(document.getElementById('new-event-goal').value) || null;
+    const logoUrl = document.getElementById('new-event-logo').value;
+    const themeColor = document.getElementById('new-event-color').value;
     if (!name) return alert('Event Name required.');
+    if (!isAllowedMediaUrl(logoUrl)) return alert('Logo URL must be a valid http:// or https:// link.');
     updateDataWrapper(() => {
         const newId = 'evt_' + Date.now();
-        appData.events.push({ id: newId, name, goalAmount, startDate, endDate });
+        appData.events.push({ id: newId, name, goalAmount, startDate, endDate, logoUrl, themeColor });
         appData.activeEventId = newId;
     }).then(async (result) => {
         if (result.status === 'success') {
@@ -686,6 +776,8 @@ function addEvent() {
     document.getElementById('new-event-goal').value = '';
     document.getElementById('new-event-start').value = '';
     document.getElementById('new-event-end').value = '';
+    document.getElementById('new-event-logo').value = '';
+    document.getElementById('new-event-color').value = '';
 }
 
 function editEvent(id) {
@@ -693,6 +785,9 @@ function editEvent(id) {
     const newGoal = parseFloat(document.getElementById(`ev-goal-${id}`).value) || null;
     const newStart = document.getElementById(`ev-start-${id}`).value;
     const newEnd = document.getElementById(`ev-end-${id}`).value;
+    const newLogo = document.getElementById(`ev-logo-${id}`).value;
+    const newColor = document.getElementById(`ev-color-${id}`).value;
+    if (!isAllowedMediaUrl(newLogo)) return alert('Logo URL must be a valid http:// or https:// link.');
     updateDataWrapper(() => {
         const ev = appData.events.find((e) => e.id === id);
         if (ev) {
@@ -700,6 +795,8 @@ function editEvent(id) {
             ev.goalAmount = newGoal;
             ev.startDate = newStart;
             ev.endDate = newEnd;
+            ev.logoUrl = newLogo;
+            ev.themeColor = newColor;
         }
     });
 }
@@ -824,7 +921,7 @@ function ensureDeviceLabel() {
 function submitTransaction() {
     const btn = document.getElementById('submit-btn');
     const msg = document.getElementById('entry-message');
-    const entityId = document.getElementById('entity-select').value;
+    const entityId = resolveEntitySelection(appData.entities, document.getElementById('entity-select').value);
     const amount = parseFloat(document.getElementById('amount-input').value);
 
     if (!entityId || !isValidTransactionAmount(amount)) {
@@ -967,6 +1064,10 @@ function renderManagement() {
                         <div class="flex-1 min-w-[160px]"><label class="text-xs text-gray-500">Start</label><input type="datetime-local" id="ev-start-${ev.id}" value="${ev.startDate || ''}" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded text-xs shadow-inner bg-white dark:bg-gray-700"></div>
                         <div class="flex-1 min-w-[160px]"><label class="text-xs text-gray-500">End</label><input type="datetime-local" id="ev-end-${ev.id}" value="${ev.endDate || ''}" class="w-full p-1.5 border border-gray-400 dark:border-gray-600 rounded text-xs shadow-inner bg-white dark:bg-gray-700"></div>
                     </div>
+                    <div class="flex gap-2 mb-3">
+                        <input type="url" id="ev-logo-${ev.id}" value="${escapeHtml(ev.logoUrl)}" class="min-w-0 flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-xs shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Event Logo URL (Optional)">
+                        <select id="ev-color-${ev.id}" class="min-w-0 flex-shrink-0 p-2 border border-gray-400 dark:border-gray-600 rounded text-xs shadow-inner bg-white dark:bg-gray-700 outline-none" title="Event Theme Color">${themeColorOptionsHtml(ev.themeColor)}</select>
+                    </div>
                     <div class="flex justify-between items-center mt-2 border-t dark:border-gray-700 pt-3">
                         <button data-action="edit-event" data-id="${ev.id}" class="text-xs bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 font-semibold py-1.5 px-4 rounded transition-colors">Save Changes</button>
                         <button data-action="purge-event" data-id="${ev.id}" class="text-xs bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 font-semibold py-1.5 px-3 rounded transition-colors" title="Remove event from the dashboard (transactions stay in the audit ledger)">Remove Event</button>
@@ -1018,7 +1119,11 @@ function renderManagement() {
         } else {
             activeTx.forEach((tx) => {
                 const ent = appData.entities.find((e) => e.id === tx.entityId);
-                const entName = ent ? ent.namePublic : 'Unknown';
+                const entName = isGeneralFundEntry(tx.entityId)
+                    ? '💝 Donation (General Fund)'
+                    : ent
+                      ? ent.namePublic
+                      : 'Unknown';
                 const dt = new Date(tx.createDate).toLocaleString([], {
                     month: 'short',
                     day: 'numeric',
@@ -1052,8 +1157,9 @@ function renderApp() {
     document.getElementById('leaderboard-title').innerText = appData.settings.title || 'Live Leaderboard';
 
     const headLogo = document.getElementById('header-logo');
-    if (appData.settings.logoUrl && !isTvMode) {
-        headLogo.src = appData.settings.logoUrl;
+    const resolvedLogoUrl = resolveLogoUrl(appData.settings, getActiveEvent());
+    if (resolvedLogoUrl && !isTvMode) {
+        headLogo.src = resolvedLogoUrl;
         headLogo.classList.remove('hidden');
     } else {
         headLogo.classList.add('hidden');
@@ -1101,21 +1207,24 @@ function renderApp() {
         }
         eventSelect.appendChild(opt);
     });
-    document.getElementById('leaderboard-subtitle').innerText =
-        `Active Event: ${activeEvent ? activeEvent.name : 'Unknown'}`;
+    document.getElementById('leaderboard-subtitle').innerText = activeEvent ? activeEvent.name : '';
 
-    const entitySelect = document.getElementById('entity-select');
-    const currentSelectedEntityId = entitySelect.value;
-    entitySelect.innerHTML = '';
+    // #entity-select is a plain text <input> backed by the #entity-options
+    // <datalist> below (type-to-search — far faster than scrolling a
+    // <select> once there are more than a handful of teams). Its typed
+    // value is never touched here, only the list of suggestions, so an
+    // operator's in-progress search survives a re-render (e.g. the 60s
+    // poll) instead of being reset like the old <select>'s selection was.
+    const entityDatalist = document.getElementById('entity-options');
+    entityDatalist.innerHTML = '';
     appData.entities.forEach((ent) => {
         const opt = document.createElement('option');
-        opt.value = ent.id;
-        opt.text = ent.namePublic;
-        if (ent.id === currentSelectedEntityId) {
-            opt.selected = true;
-        }
-        entitySelect.appendChild(opt);
+        opt.value = ent.namePublic;
+        entityDatalist.appendChild(opt);
     });
+    const generalFundOpt = document.createElement('option');
+    generalFundOpt.value = GENERAL_FUND_LABEL;
+    entityDatalist.appendChild(generalFundOpt);
 
     const totals = computeTotals(appData.entities, getVisibleTransactionEntries(), appData.activeEventId);
     const sortedEntities = sortEntitiesByTotal(appData.entities, totals);
@@ -1144,42 +1253,61 @@ function renderApp() {
 
     // --- Render Goal Gauge ---
     const gaugeContainer = document.getElementById('goal-gauge-container');
-    const totalRaised = Object.values(totals).reduce((sum, val) => sum + val, 0);
+    // Uses every transaction for the event (team-tied and General Fund
+    // alike), not just Object.values(totals) — a General Fund donation
+    // must still count toward the overall total/goal even though it's
+    // excluded from computeTotals()'s per-entity (ranking) totals.
+    const totalRaised = computeEventTotal(getVisibleTransactionEntries(), appData.activeEventId);
 
-    if (activeEvent && activeEvent.goalAmount && activeEvent.goalAmount > 0) {
-        const goalAmount = parseFloat(activeEvent.goalAmount);
-        const dashArray = 125.66;
-        const { dashOffset } = computeGaugeGeometry(totalRaised, goalAmount, dashArray);
+    if (activeEvent) {
+        const textSize = isTvMode ? 'text-2xl' : 'text-base';
+        // isTvMode only controls size here — color follows the actual
+        // light/dark theme (see initTheme()), not the display mode, so a
+        // TV display switched to light mode renders with light-mode colors.
+        const isDark = document.documentElement.classList.contains('dark');
+        const valColor = isDark ? 'text-white' : 'text-gray-900';
+        const labelColor = isDark ? 'text-gray-400' : 'text-gray-500';
+        const formattedTotal = totalRaised.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
 
-        const gaugeSize = isTvMode ? 'w-56 h-28' : 'w-48 h-24';
-        const textSize = isTvMode ? 'text-3xl' : 'text-xl';
-        const labelSize = isTvMode ? 'text-sm text-gray-400' : 'text-xs text-gray-500';
+        if (activeEvent.goalAmount && activeEvent.goalAmount > 0) {
+            const goalAmount = parseFloat(activeEvent.goalAmount);
+            const { percentage } = computeGaugeGeometry(totalRaised, goalAmount);
+            const trackColor = isDark ? 'bg-gray-800' : 'bg-gray-200';
+            const resolvedTheme = resolveThemeColor(appData.settings, activeEvent);
+            const fillColor = resolvedTheme.includes('red')
+                ? 'bg-red-500'
+                : resolvedTheme.includes('green')
+                  ? 'bg-green-500'
+                  : resolvedTheme.includes('purple')
+                    ? 'bg-purple-500'
+                    : 'bg-blue-500';
 
-        const valColor =
-            isTvMode || document.documentElement.classList.contains('dark') ? 'text-white' : 'text-gray-900';
-        const bgStroke = isTvMode || document.documentElement.classList.contains('dark') ? '#374151' : '#e5e7eb';
-        const fgStroke =
-            appData.settings.themeColor && appData.settings.themeColor.includes('red')
-                ? '#ef4444'
-                : appData.settings.themeColor && appData.settings.themeColor.includes('green')
-                  ? '#22c55e'
-                  : appData.settings.themeColor && appData.settings.themeColor.includes('purple')
-                    ? '#a855f7'
-                    : '#3b82f6';
-
-        gaugeContainer.innerHTML = `
-            <div class="relative ${gaugeSize}">
-                <svg viewBox="0 0 100 50" class="overflow-visible w-full h-full">
-                    <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="${bgStroke}" stroke-width="10" stroke-linecap="round"></path>
-                    <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="${fgStroke}" stroke-width="10" stroke-linecap="round"
-                          stroke-dasharray="${dashArray}" stroke-dashoffset="${dashOffset}" class="transition-all duration-1000 ease-out"></path>
-                </svg>
-                <div class="absolute bottom-0 left-0 right-0 text-center flex flex-col translate-y-2">
-                    <span class="font-bold ${textSize} ${valColor}">$${totalRaised.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    <span class="uppercase font-semibold tracking-wide ${labelSize}">of $${goalAmount.toLocaleString()}</span>
+            gaugeContainer.innerHTML = `
+                <div class="w-full">
+                    <div class="${textSize} font-bold ${valColor} mb-1.5">
+                        $${formattedTotal}
+                        <span class="${labelColor}">of $${goalAmount.toLocaleString()} · ${Math.round(percentage)}% to goal</span>
+                    </div>
+                    <div class="w-full h-1.5 rounded-full ${trackColor} overflow-hidden">
+                        <div class="h-full rounded-full ${fillColor} transition-all duration-1000 ease-out" data-bar-pct="${percentage}"></div>
+                    </div>
                 </div>
-            </div>
-        `;
+            `;
+            applyBarWidths(gaugeContainer);
+        } else {
+            // No goal set for this event — nothing to show progress
+            // against, so just the running total, no track/fill bar.
+            gaugeContainer.innerHTML = `
+                <div class="w-full">
+                    <div class="${textSize} font-bold ${valColor}">
+                        $${formattedTotal} <span class="${labelColor}">raised</span>
+                    </div>
+                </div>
+            `;
+        }
         gaugeContainer.classList.remove('hidden');
     } else {
         gaugeContainer.innerHTML = '';
@@ -1209,30 +1337,41 @@ function renderApp() {
         return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
+    // sortedEntities is already highest-total-first, so its first entry
+    // (if any) holds the leader's amount every other row's bar scales
+    // against — see computeRelativeBarPercent() in js/logic.js.
+    const leaderAmount = sortedEntities.length > 0 ? totals[sortedEntities[0].id] || 0 : 0;
+
     function heroRowHtml(ent, rank) {
         const avatar = ent.imageUrl
             ? `<img src="${escapeHtml(ent.imageUrl)}" class="${avatarSize} rounded-full object-cover border border-gray-300 dark:border-gray-700 flex-shrink-0">`
             : '';
+        const barPct = computeRelativeBarPercent(totals[ent.id], leaderAmount);
         return `
             <div class="flex items-baseline gap-3 py-2.5 border-b border-gray-200 dark:border-gray-800 last:border-b-0 break-inside-avoid">
                 <span class="font-extrabold tabular-nums text-gray-400 dark:text-gray-500 ${rankSize} flex-shrink-0">${rank}</span>
                 ${avatar}
                 <div class="flex-1 min-w-0 flex flex-col gap-1">
                     <span class="font-bold uppercase tracking-wide truncate ${nameSize} text-gray-900 dark:text-white">${escapeHtml(ent.namePublic)}</span>
-                    <span class="block h-[3px] w-9 rounded-full ${ent.color || 'bg-blue-500'}"></span>
+                    <div class="h-[3px] w-24 max-w-full rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden">
+                        <div class="h-full rounded-full ${ent.color || 'bg-blue-500'} transition-all duration-700 ease-out" data-bar-pct="${barPct}"></div>
+                    </div>
                 </div>
                 <span class="font-extrabold tabular-nums flex-shrink-0 ${amountSize} text-gray-900 dark:text-white">$${formatAmount(totals[ent.id])}</span>
             </div>`;
     }
 
     function fieldRowHtml(ent, rank) {
+        const barPct = computeRelativeBarPercent(totals[ent.id], leaderAmount);
         return `
             <div class="flex items-baseline gap-2 py-1">
                 <span class="font-extrabold tabular-nums text-gray-400 dark:text-gray-500 text-xs w-6 flex-shrink-0">${rank}</span>
-                <span class="flex items-center gap-1.5 flex-1 min-w-0">
-                    <span class="inline-block w-2 h-2 rounded-full ${ent.color || 'bg-blue-500'} flex-shrink-0"></span>
+                <div class="flex items-center gap-1.5 flex-1 min-w-0">
+                    <div class="w-6 h-[3px] rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden flex-shrink-0">
+                        <div class="h-full rounded-full ${ent.color || 'bg-blue-500'}" data-bar-pct="${barPct}"></div>
+                    </div>
                     <span class="font-bold uppercase text-[10px] tracking-wide truncate text-gray-700 dark:text-gray-300">${escapeHtml(ent.namePublic)}</span>
-                </span>
+                </div>
                 <span class="font-extrabold tabular-nums flex-shrink-0 text-sm text-gray-900 dark:text-white">$${formatAmount(totals[ent.id])}</span>
             </div>`;
     }
@@ -1269,13 +1408,18 @@ function renderApp() {
                 }
             }
             const fieldRowsHtml = pageItems.map((item) => fieldRowHtml(item.ent, item.rank)).join('');
+            // A plain divider, not a labeled "Also competing — N more"
+            // callout — the field grid immediately below it already makes
+            // the additional participants visible; it doesn't need a
+            // heading to announce that they exist.
             fieldSection = `
-                <div class="text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500 pt-3 mt-1 border-t border-gray-200 dark:border-gray-800 mb-2">Also competing — ${field.length} more</div>
+                <div class="border-t border-gray-200 dark:border-gray-800 pt-3 mt-1"></div>
                 <div class="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-x-4 gap-y-1">${fieldRowsHtml}</div>
                 ${pageIndicator}`;
         }
         board.innerHTML = spotlightHtml + fieldSection;
     }
+    applyBarWidths(board);
 
     runCountdown();
 }
@@ -1304,6 +1448,7 @@ function initApp() {
         document.getElementById('login-section').classList.replace('block', 'hidden');
         document.getElementById('app-section').classList.replace('hidden', 'flex');
         document.getElementById('status').innerText = 'Connected';
+        document.getElementById('disconnect-btn').classList.remove('hidden');
 
         fetchAll();
 
@@ -1333,7 +1478,9 @@ function initApp() {
 // every render.
 function bindStaticEventListeners() {
     document.getElementById('dark-mode-toggle').addEventListener('click', toggleDarkMode);
+    document.getElementById('tv-theme-toggle').addEventListener('click', toggleDarkMode);
     document.getElementById('login-btn').addEventListener('click', startAuthFlow);
+    document.getElementById('disconnect-btn').addEventListener('click', disconnectDropbox);
     document.getElementById('tab-dashboard').addEventListener('click', () => switchTab('dashboard'));
     document.getElementById('tab-management').addEventListener('click', () => switchTab('management'));
     document.getElementById('submit-btn').addEventListener('click', submitTransaction);
