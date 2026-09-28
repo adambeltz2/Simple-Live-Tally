@@ -1337,10 +1337,10 @@ function renderApp() {
     const totals = computeTotals(appData.entities, getVisibleTransactionEntries(), appData.activeEventId);
     const sortedEntities = sortEntitiesByTotal(appData.entities, totals);
 
-    // --- Render Scrolling Top Ticker (Top 5 Leaders) ---
+    // --- Render Scrolling Top Ticker (Top 25 Leaders) ---
     const tickerWrapper = document.getElementById('ticker-wrapper');
     const tickerContent = document.getElementById('ticker-content');
-    const topNCount = 5;
+    const topNCount = 25;
     const topLeaders = sortedEntities.slice(0, topNCount);
 
     if (topLeaders.length > 0) {
@@ -1354,6 +1354,13 @@ function renderApp() {
             });
         }
         tickerContent.innerHTML = tickerHtml;
+        // The CSS animation scrolls exactly one copy of the (duplicated)
+        // content per cycle, so its duration has to scale with the leader
+        // count or a full board of 25 would fly by at 5x the speed a 5-item
+        // board did. 5s/entry matches the original fixed 25s-for-5-entries
+        // pace. Set via .style (script-driven, not an HTML attribute) since
+        // the CSP's style-src has no 'unsafe-inline' — see applyBarWidths().
+        tickerContent.style.animationDuration = `${topLeaders.length * 5}s`;
         tickerWrapper.classList.remove('hidden');
     } else {
         tickerWrapper.classList.add('hidden');

@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.2] - 2026-09-28
+### Changed
+- **The scrolling top ticker now shows up to the top 25 leaders before looping**, up from 5. Its scroll speed now scales with the leader count (5s per entry, matching the original 5-entry/25s pace) so a full board doesn't just fly by faster.
+
 ## [2.4.1] - 2026-09-28
 ### Added
 - **Connection status now shows which Dropbox account is connected**, e.g. "Connected as you@example.com" instead of just "Connected." Every role (including the read-only viewer) already requests `account_info.read`, so this needed no new scope. Catches a device accidentally signed into the wrong Dropbox account immediately instead of it silently showing an empty or unrelated event. The Disconnect confirmation now also names the account being disconnected. Added `DropboxProvider.fetchAccountInfo()` (`js/providers/dropbox.js`).

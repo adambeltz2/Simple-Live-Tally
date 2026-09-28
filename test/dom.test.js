@@ -528,6 +528,45 @@ test('DOM: dashboard rendering', async (t) => {
         assert.match(board.textContent, /Team 29\b/, 'the last team is reachable on the second page');
         assert.doesNotMatch(board.textContent, /Team 5\b/, 'the first page is no longer shown');
     });
+
+    await t.test('the scrolling top ticker shows up to the top 25 leaders before looping', () => {
+        const window = loadApp();
+        const { entities, entries } = makeRoster(30);
+        window.appData = baseAppData({ entities });
+        window.transactionEntries = entries;
+
+        window.renderApp();
+
+        const tickerContent = window.document.getElementById('ticker-content');
+        assert.match(
+            tickerContent.textContent,
+            /Team 24\b/,
+            'rank 25 (Team 24, 0-indexed) should still be on the ticker',
+        );
+        assert.doesNotMatch(tickerContent.textContent, /Team 25\b/, 'rank 26 is past the top 25 and should not appear');
+        // The content is duplicated once (for the seamless loop), so each
+        // shown name appears exactly twice.
+        assert.equal(tickerContent.textContent.match(/Team 0\b/g).length, 2);
+    });
+
+    await t.test('the ticker scroll duration scales with the leader count so pacing stays readable', () => {
+        const window = loadApp();
+        const fiveRoster = makeRoster(5);
+        window.appData = baseAppData({ entities: fiveRoster.entities });
+        window.transactionEntries = fiveRoster.entries;
+        window.renderApp();
+        assert.equal(window.document.getElementById('ticker-content').style.animationDuration, '25s');
+
+        const thirtyRoster = makeRoster(30);
+        window.appData = baseAppData({ entities: thirtyRoster.entities });
+        window.transactionEntries = thirtyRoster.entries;
+        window.renderApp();
+        assert.equal(
+            window.document.getElementById('ticker-content').style.animationDuration,
+            '125s',
+            'capped at the top 25 leaders, so 30 teams paces the same as exactly 25 would',
+        );
+    });
 });
 
 test('DOM: input validation', async (t) => {
