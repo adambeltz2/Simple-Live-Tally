@@ -1259,10 +1259,7 @@ function renderApp() {
     // excluded from computeTotals()'s per-entity (ranking) totals.
     const totalRaised = computeEventTotal(getVisibleTransactionEntries(), appData.activeEventId);
 
-    if (activeEvent && activeEvent.goalAmount && activeEvent.goalAmount > 0) {
-        const goalAmount = parseFloat(activeEvent.goalAmount);
-        const { percentage } = computeGaugeGeometry(totalRaised, goalAmount);
-
+    if (activeEvent) {
         const textSize = isTvMode ? 'text-2xl' : 'text-base';
         // isTvMode only controls size here — color follows the actual
         // light/dark theme (see initTheme()), not the display mode, so a
@@ -1270,28 +1267,47 @@ function renderApp() {
         const isDark = document.documentElement.classList.contains('dark');
         const valColor = isDark ? 'text-white' : 'text-gray-900';
         const labelColor = isDark ? 'text-gray-400' : 'text-gray-500';
-        const trackColor = isDark ? 'bg-gray-800' : 'bg-gray-200';
-        const resolvedTheme = resolveThemeColor(appData.settings, activeEvent);
-        const fillColor = resolvedTheme.includes('red')
-            ? 'bg-red-500'
-            : resolvedTheme.includes('green')
-              ? 'bg-green-500'
-              : resolvedTheme.includes('purple')
-                ? 'bg-purple-500'
-                : 'bg-blue-500';
+        const formattedTotal = totalRaised.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
 
-        gaugeContainer.innerHTML = `
-            <div class="w-full">
-                <div class="${textSize} font-bold ${valColor} mb-1.5">
-                    $${totalRaised.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    <span class="${labelColor}">of $${goalAmount.toLocaleString()} · ${Math.round(percentage)}% to goal</span>
+        if (activeEvent.goalAmount && activeEvent.goalAmount > 0) {
+            const goalAmount = parseFloat(activeEvent.goalAmount);
+            const { percentage } = computeGaugeGeometry(totalRaised, goalAmount);
+            const trackColor = isDark ? 'bg-gray-800' : 'bg-gray-200';
+            const resolvedTheme = resolveThemeColor(appData.settings, activeEvent);
+            const fillColor = resolvedTheme.includes('red')
+                ? 'bg-red-500'
+                : resolvedTheme.includes('green')
+                  ? 'bg-green-500'
+                  : resolvedTheme.includes('purple')
+                    ? 'bg-purple-500'
+                    : 'bg-blue-500';
+
+            gaugeContainer.innerHTML = `
+                <div class="w-full">
+                    <div class="${textSize} font-bold ${valColor} mb-1.5">
+                        $${formattedTotal}
+                        <span class="${labelColor}">of $${goalAmount.toLocaleString()} · ${Math.round(percentage)}% to goal</span>
+                    </div>
+                    <div class="w-full h-1.5 rounded-full ${trackColor} overflow-hidden">
+                        <div class="h-full rounded-full ${fillColor} transition-all duration-1000 ease-out" data-bar-pct="${percentage}"></div>
+                    </div>
                 </div>
-                <div class="w-full h-1.5 rounded-full ${trackColor} overflow-hidden">
-                    <div class="h-full rounded-full ${fillColor} transition-all duration-1000 ease-out" data-bar-pct="${percentage}"></div>
+            `;
+            applyBarWidths(gaugeContainer);
+        } else {
+            // No goal set for this event — nothing to show progress
+            // against, so just the running total, no track/fill bar.
+            gaugeContainer.innerHTML = `
+                <div class="w-full">
+                    <div class="${textSize} font-bold ${valColor}">
+                        $${formattedTotal} <span class="${labelColor}">raised</span>
+                    </div>
                 </div>
-            </div>
-        `;
-        applyBarWidths(gaugeContainer);
+            `;
+        }
         gaugeContainer.classList.remove('hidden');
     } else {
         gaugeContainer.innerHTML = '';

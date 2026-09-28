@@ -302,6 +302,30 @@ test('DOM: dashboard rendering', async (t) => {
         assert.match(gaugeHtml, /bg-gray-200/, 'light theme must use the light track color, not the dark one');
     });
 
+    await t.test('an event with no goal shows just the running total, not a progress bar', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            events: [{ id: 'evt1', name: 'Main', goalAmount: null, startDate: '', endDate: '' }],
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.transactionEntries = [
+            baseEntry({ id: 't1', logicalId: 't1', entityId: 'e1', eventId: 'evt1', amount: 75 }),
+        ];
+
+        window.renderApp();
+
+        const gaugeContainer = window.document.getElementById('goal-gauge-container');
+        assert.equal(gaugeContainer.classList.contains('hidden'), false, 'the total should still be shown, not hidden');
+        assert.match(gaugeContainer.innerHTML, /\$75\.00/);
+        assert.match(gaugeContainer.innerHTML, /raised/);
+        assert.doesNotMatch(gaugeContainer.innerHTML, /to goal/);
+        assert.equal(
+            gaugeContainer.querySelector('[data-bar-pct]'),
+            null,
+            'there is nothing to show progress against, so no track/fill bar should render',
+        );
+    });
+
     await t.test('the entity search datalist offers a General Fund / Donation option alongside every team', () => {
         const window = loadApp();
         window.appData = baseAppData({
