@@ -180,6 +180,34 @@
         return hash === VIEWER_HASH;
     }
 
+    // A "viewer link" hands a second device a read-only Dropbox session
+    // without that device ever seeing Dropbox's own login screen: the admin
+    // generates one read-only access/refresh token pair (the exact same
+    // grant #tv-viewer's own sign-in would produce) and this URL carries it
+    // to the other device instead. The tokens travel in the hash, never the
+    // query string or path, so they're never sent to any server — this is a
+    // static site, but that property matters if it's ever hosted behind
+    // something that logs requests. See generateViewerLink()/
+    // importViewerTokenFromUrl() in js/app.js for where these are used.
+    function buildViewerLinkUrl(baseUrl, accessToken, refreshToken) {
+        const params = new URLSearchParams();
+        params.set('at', accessToken);
+        if (refreshToken) params.set('rt', refreshToken);
+        return `${baseUrl}${VIEWER_HASH}?${params.toString()}`;
+    }
+
+    // The inverse of buildViewerLinkUrl(): pulls the access/refresh token
+    // pair back out of a URL hash that carries one, or returns null if this
+    // hash isn't a viewer-link import at all (a plain "#tv-viewer" from a
+    // normal sign-in, some other hash, or nothing).
+    function parseViewerLinkImport(hash) {
+        if (!hash || !hash.startsWith(VIEWER_HASH + '?')) return null;
+        const params = new URLSearchParams(hash.slice(VIEWER_HASH.length + 1));
+        const accessToken = params.get('at');
+        if (!accessToken) return null;
+        return { accessToken, refreshToken: params.get('rt') || null };
+    }
+
     // URL hash for a "keyer" device — a station where a volunteer only adds
     // donations, never touches Settings/Teams/Events. Unlike the viewer,
     // this needs a full read-write Dropbox token (it has to create
@@ -395,6 +423,8 @@
         isAllowedMediaUrl,
         VIEWER_HASH,
         isViewerHash,
+        buildViewerLinkUrl,
+        parseViewerLinkImport,
         KEYER_HASH,
         isKeyerHash,
         computeRetryDelay,

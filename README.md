@@ -58,13 +58,23 @@ Each Keyer device is prompted once for a short station label (e.g. "Front Table"
 
 ## Running the Dashboard on a Second Device
 
-The operator's laptop (running "Add Transaction") and the screen the audience watches don't have to be the same computer. Since all event data already lives in your Dropbox App Folder rather than in the browser, a second device just needs its own read-only connection to the same folder:
+The operator's laptop (running "Add Transaction") and the screen the audience watches don't have to be the same computer. Since all event data already lives in your Dropbox App Folder rather than in the browser, a second device just needs its own read-only connection to the same folder. There are two ways to set that up:
+
+### Option 1 — Viewer Link (recommended; the second device never logs into Dropbox)
+
+1. On your own admin device, go to **Data Management > Settings > Second Device** and click **Generate Viewer Link**.
+2. You'll be sent through Dropbox's own sign-in once — this grants a read-only connection (`account_info.read`, `files.metadata.read`, `files.content.read`), same as the connection Option 2 below sets up, just obtained from your own device instead. Your own admin session is untouched throughout.
+3. You'll land back on a **Viewer link ready** screen with a link and a **Copy** button. Open that link on the second device (paste it in, AirDrop it, text it — however's convenient) and it connects immediately, read-only, with **no Dropbox login screen on that device at all**.
+
+**Keep that link private.** It carries the read-only connection itself — anyone who has it can view the event's live totals until you generate a new one (generating a new link doesn't revoke the old one; if you need to be sure an old link stops working, revoke Simple Live Tally's access from your [Dropbox account's connected-apps settings](https://www.dropbox.com/account/connected_apps) and generate a fresh one).
+
+### Option 2 — Sign in on the second device directly
 
 1. On the second device (a lobby TV's browser, a spare laptop plugged into a projector, etc.), open this app's URL with `#tv-viewer` appended, e.g. `https://<your-username>.github.io/<repository-name>/#tv-viewer`.
-2. Click **Authenticate with Dropbox** and sign in with the **same Dropbox account** the operator used. This device requests a separate, *read-only* connection (`account_info.read`, `files.metadata.read`, `files.content.read`) — it can never add, edit, or delete anything, even if someone finds their way to this screen's browser.
+2. Click **Authenticate with Dropbox** and sign in with the **same Dropbox account** the operator used. This device requests the same restricted, *read-only* connection Option 1 does — it can never add, edit, or delete anything, even if someone finds their way to this screen's browser.
 3. The screen then behaves exactly like the regular `#tv` display mode — high-contrast, full-bleed, no admin controls — and polls for updates the same way the operator's dashboard does.
 
-Each device signs in independently and keeps its own token in its own browser's local storage, so there's no pairing step and no limit on how many display-only screens you run.
+Either way, each device keeps its own token in its own browser's local storage, so there's no pairing step and no limit on how many display-only screens you run.
 
 ---
 
@@ -94,7 +104,7 @@ The Live Dashboard's field grid (13+ teams) simply grows and scrolls, since the 
 * **Type-to-Search Team Picker:** The "Add Transaction" entity field is a searchable text field, not a long dropdown — type a few letters of a team's name (or "Donation" for the General Fund) instead of scrolling, which matters once a roster has more than a handful of teams.
 * **Per-Event Branding & Dark Mode:** Set a logo and theme color per Event (Data Management > Events) — each event can look different, or leave either on "Use App Default" to fall back to the app-wide Settings value. Toggle light/dark independently on every device, including the TV/viewer display (its own toggle appears top-right there, since the regular header is hidden), each remembering its own choice.
 * **Dedicated TV / Projector Display Mode:** Append `#tv` to the URL to instantly switch to a high-contrast mode built for 1080p projectors — it never scrolls; a large roster pages through itself automatically instead.
-* **Multi-Device Display Mode:** Append `#tv-viewer` to the URL on a second computer to run the same TV display there, signed in independently with its own restricted, read-only Dropbox connection — see [Running the Dashboard on a Second Device](#running-the-dashboard-on-a-second-device) below.
+* **Multi-Device Display Mode:** Run the same TV display on a second computer with a read-only connection to the same event — either generate a **Viewer Link** from Settings so that device never logs into Dropbox at all, or have it sign in independently at `#tv-viewer` — see [Running the Dashboard on a Second Device](#running-the-dashboard-on-a-second-device) below.
 * **Dedicated Keyer Stations:** Append `#keyer` to the URL for a focused, admin-nav-free "Add Transaction" screen for a data-entry station — see [Roles](#roles) above.
 * **Full Data Management & Factory Resets:** Easily create, edit, or delete Events and Teams from a management panel that uses the full width of a wide screen. Removing an Event or Team from the dashboard only removes it from view — the underlying transaction ledger entries are never deleted, so the full history always survives in the ZIP export.
 * **Full Audit Trail Export:** Instantly export every settings/team/event snapshot and every individual transaction entry (including who entered it and when) as a timestamped `.zip` package right from the management panel.

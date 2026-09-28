@@ -32,6 +32,37 @@ from this list — this file is only what's still outstanding.
 
 ## Product
 
+- [ ] **[FEATURE] Shared-link viewer connection (no Dropbox OAuth grant at all, not even a one-time one).**
+      v2.4.0 shipped the "Viewer Link" hand-off (Settings > Second Device):
+      the second device connects without doing its own Dropbox login, but
+      it's still a real Dropbox OAuth token underneath, obtained via one
+      read-only grant on the admin's device. A shared-link version would go
+      further — the admin's browser periodically writes a small public
+      summary file (just what a viewer needs to render: settings, active
+      event, per-entity totals, overall total) and creates a Dropbox shared
+      link to it; the second device just polls that plain URL, no OAuth
+      concept involved at all. Needs: the `sharing.write` scope (not
+      currently requested — enabling it means re-authenticating the admin's
+      existing session once, since this app's token wouldn't have it),
+      wiring a "write public summary" step into the existing 60s poll cycle
+      in `js/app.js`, and extending `index.html`'s CSP `connect-src` to
+      Dropbox's shared-link content domain. Tradeoff worth stating clearly
+      in the UI if built: unlike the OAuth-based viewer link, a Dropbox
+      shared link has no expiry and isn't revoked by generating a new
+      one — revoking it means unsharing the file directly in Dropbox.
+
+- [ ] **[FEATURE] Show which Dropbox account is connected, not just "Connected."**
+      Every role (Admin, `#keyer`, `#tv-viewer`) has to sign into the exact
+      same Dropbox account to see the same data — there's no other
+      isolation between them. Right now the app never shows an account
+      email anywhere, so a device authenticated against the wrong Dropbox
+      account (a real mistake: someone at a keyer station signs into their
+      own personal Dropbox instead of the organization's) fails silently —
+      it just shows an empty/unrelated event with no error. A call to
+      Dropbox's `/2/users/get_current_account` after connecting, showing the
+      email next to "Connected" (or in the Disconnect confirmation), would
+      make a mismatch obvious at setup time instead of discovered mid-event.
+
 - [ ] **[FEATURE] Google Drive as a second storage provider.** The
       fetch/save/retry orchestration in `js/app.js` (`runUpdateWithRetry`,
       the offline write queue) already only talks to the interface in

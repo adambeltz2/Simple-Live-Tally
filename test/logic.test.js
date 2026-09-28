@@ -18,6 +18,8 @@ const {
     isAllowedMediaUrl,
     VIEWER_HASH,
     isViewerHash,
+    buildViewerLinkUrl,
+    parseViewerLinkImport,
     KEYER_HASH,
     isKeyerHash,
     computeRetryDelay,
@@ -366,6 +368,41 @@ test('isViewerHash', async (t) => {
         assert.equal(isViewerHash('#tv'), false);
         assert.equal(isViewerHash(''), false);
         assert.equal(isViewerHash('#tv-viewerish'), false);
+    });
+});
+
+test('buildViewerLinkUrl / parseViewerLinkImport', async (t) => {
+    await t.test('round-trips an access token and refresh token through the URL', () => {
+        const url = buildViewerLinkUrl('https://example.com/app/', 'access123', 'refresh456');
+        assert.equal(url, 'https://example.com/app/#tv-viewer?at=access123&rt=refresh456');
+
+        const hash = url.slice(url.indexOf('#'));
+        const parsed = parseViewerLinkImport(hash);
+        assert.deepEqual(parsed, { accessToken: 'access123', refreshToken: 'refresh456' });
+    });
+
+    await t.test('round-trips an access token with no refresh token', () => {
+        const url = buildViewerLinkUrl('https://example.com/app/', 'access123', null);
+        assert.equal(url, 'https://example.com/app/#tv-viewer?at=access123');
+
+        const parsed = parseViewerLinkImport(url.slice(url.indexOf('#')));
+        assert.deepEqual(parsed, { accessToken: 'access123', refreshToken: null });
+    });
+
+    await t.test('parseViewerLinkImport returns null for a plain #tv-viewer sign-in hash', () => {
+        assert.equal(parseViewerLinkImport('#tv-viewer'), null);
+    });
+
+    await t.test('parseViewerLinkImport returns null for unrelated hashes', () => {
+        assert.equal(parseViewerLinkImport('#tv'), null);
+        assert.equal(parseViewerLinkImport('#keyer'), null);
+        assert.equal(parseViewerLinkImport(''), null);
+        assert.equal(parseViewerLinkImport(null), null);
+        assert.equal(parseViewerLinkImport(undefined), null);
+    });
+
+    await t.test('parseViewerLinkImport returns null if the at param is missing', () => {
+        assert.equal(parseViewerLinkImport('#tv-viewer?rt=refresh456'), null);
     });
 });
 

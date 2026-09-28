@@ -72,6 +72,20 @@
             </button>
         </div>
 
+        <!-- Viewer Link Result — shown right after generating one from
+             Settings (see generateViewerLink()/showGeneratedViewerLink() in
+             js/app.js). This device's own admin session is never touched by
+             generating one; this is a one-time display, not a sign-in. -->
+        <div id="viewer-link-result" class="hidden p-8 text-center my-auto max-w-lg mx-auto">
+            <p class="mb-3 font-semibold text-gray-900 dark:text-white">Viewer link ready</p>
+            <p class="mb-4 text-sm text-gray-600 dark:text-gray-400">Open this link on the second device — it connects automatically, read-only, with no Dropbox login needed there. Keep it private: anyone with this link can view this event's live totals until you generate a new one.</p>
+            <div class="flex gap-2 mb-4">
+                <input type="text" id="viewer-link-output" readonly class="min-w-0 flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-xs shadow-inner bg-white dark:bg-gray-700 outline-none">
+                <button id="viewer-link-copy-btn" class="flex-shrink-0 bg-blue-600 hover:opacity-90 text-white font-semibold py-2 px-4 rounded text-sm">Copy</button>
+            </div>
+            <button id="viewer-link-done-btn" class="bg-gray-800 dark:bg-gray-600 text-white font-semibold py-2 px-6 rounded text-sm hover:opacity-90">Done</button>
+        </div>
+
         <!-- App Section -->
         <div id="app-section" class="hidden flex-col flex-1 min-h-0">
             
@@ -190,6 +204,12 @@
                                 <button id="factory-reset-btn" class="flex-1 bg-red-600 text-white font-semibold py-2 rounded text-sm hover:bg-red-700 transition-opacity" title="Purge everything and start completely clean">Factory Reset</button>
                             </div>
                         </div>
+
+                        <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm mt-4">
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Second Device</label>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Generate a read-only link for a TV, lobby laptop, or other display — it connects straight to this event's data with no Dropbox login required on that device.</p>
+                            <button id="generate-viewer-link-btn" class="w-full bg-gray-800 dark:bg-gray-600 text-white font-semibold py-2 rounded text-sm hover:opacity-90">Generate Viewer Link</button>
+                        </div>
                     </div>
 
                     <!-- PANE: Teams -->
@@ -249,7 +269,7 @@
 
     <!-- Footer -->
     <footer id="main-footer" class="flex-shrink-0 text-center text-sm text-gray-500 py-4 mt-auto">
-        <p class="font-medium">Simple Live Tally <span class="font-bold">v2.3.2</span></p>
+        <p class="font-medium">Simple Live Tally <span class="font-bold">v2.4.0</span></p>
         <p class="mt-1 space-x-2">
             <a href="https://github.com/adambeltz2/Simple-Live-Tally" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">GitHub</a>
             <span>|</span>

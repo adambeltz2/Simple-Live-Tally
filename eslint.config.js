@@ -23,6 +23,8 @@ const logicGlobals = {
     isAllowedMediaUrl: 'readonly',
     VIEWER_HASH: 'readonly',
     isViewerHash: 'readonly',
+    buildViewerLinkUrl: 'readonly',
+    parseViewerLinkImport: 'readonly',
     KEYER_HASH: 'readonly',
     isKeyerHash: 'readonly',
     computeRetryDelay: 'readonly',

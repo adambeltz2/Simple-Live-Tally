@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-09-28
+### Added
+- **Viewer Link: connect a second device without it ever logging into Dropbox.** Settings > Second Device now has a "Generate Viewer Link" button. It runs the same read-only OAuth grant `#tv-viewer` sign-in has always used, but instead of that device doing its own Dropbox login, the resulting access/refresh token pair is handed off through a URL — the second device just opens the link and is connected immediately, read-only, with no Dropbox screen at all on that end. The admin's own session is never touched by generating one. The tokens travel in the URL hash (never sent to any server, even this static one) rather than the query string, and the link is explicitly labeled as sensitive — anyone who has it can view the event's live totals until a new one is generated. Added `buildViewerLinkUrl()`/`parseViewerLinkImport()` (`js/logic.js`).
+
 ## [2.3.2] - 2026-09-28
 ### Changed
 - **An event with no goal amount set now shows its running total** ("$X,XXX.XX raised") in the goal-bar area instead of hiding it entirely — there's nothing to show progress against without a goal, so no track/fill bar renders, just the total.

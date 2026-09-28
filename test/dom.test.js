@@ -1318,6 +1318,153 @@ test('DOM: multi-device viewer mode (#tv-viewer)', async (t) => {
     });
 });
 
+test('DOM: viewer link hand-off (second device with no Dropbox login of its own)', async (t) => {
+    await t.test('opening a URL with an imported token signs this device in without ever calling Dropbox', () => {
+        const window = loadApp('http://localhost/#tv-viewer?at=access123&rt=refresh456');
+
+        assert.equal(window.localStorage.getItem('dropbox_token'), 'access123');
+        assert.equal(window.localStorage.getItem('dropbox_refresh_token'), 'refresh456');
+        assert.equal(
+            window.location.hash,
+            '#tv-viewer',
+            'the token params must be scrubbed from the visible hash immediately',
+        );
+    });
+
+    await t.test('an imported token with no refresh token still signs the device in', () => {
+        const window = loadApp('http://localhost/#tv-viewer?at=access123');
+
+        assert.equal(window.localStorage.getItem('dropbox_token'), 'access123');
+        assert.equal(window.localStorage.getItem('dropbox_refresh_token'), null);
+        assert.equal(window.location.hash, '#tv-viewer');
+    });
+
+    await t.test('a plain #tv-viewer sign-in (no import params) is left completely alone', () => {
+        const window = loadApp('http://localhost/#tv-viewer');
+
+        assert.equal(window.localStorage.getItem('dropbox_token'), null);
+        assert.equal(window.location.hash, '#tv-viewer');
+    });
+
+    await t.test('generateViewerLink() requests the restricted viewer scope under its own PKCE verifier', async () => {
+        const window = loadApp();
+        window.localStorage.setItem('dropbox_token', 'admin-own-token');
+
+        await window.generateViewerLink();
+
+        assert.ok(
+            window.localStorage.getItem('viewer_link_pkce_verifier'),
+            'a dedicated verifier should be stored, distinct from the admin session',
+        );
+        assert.equal(
+            window.localStorage.getItem('pkce_verifier'),
+            null,
+            'must not touch the normal sign-in verifier key',
+        );
+        assert.equal(
+            window.localStorage.getItem('dropbox_token'),
+            'admin-own-token',
+            "the admin's own session must be untouched by starting this flow",
+        );
+    });
+
+    await t.test(
+        'completing viewer-link generation shows the link and leaves an already-signed-in admin session untouched',
+        async () => {
+            const window = loadApp('http://localhost/?code=abc123');
+            window.localStorage.setItem('viewer_link_pkce_verifier', 'stub-verifier');
+            window.localStorage.setItem('dropbox_token', 'admin-own-token');
+            window.localStorage.setItem('dropbox_refresh_token', 'admin-own-refresh');
+            window.fetch = async (url) => {
+                if (String(url).includes('oauth2/token')) {
+                    return {
+                        ok: true,
+                        json: async () => ({ access_token: 'viewer-tok', refresh_token: 'viewer-rtok' }),
+                    };
+                }
+                throw new Error('unexpected fetch URL: ' + url);
+            };
+
+            await window.completeViewerLinkGeneration('abc123', 'stub-verifier');
+
+            assert.equal(
+                window.localStorage.getItem('viewer_link_pkce_verifier'),
+                null,
+                'the one-time verifier should be consumed',
+            );
+            assert.equal(
+                window.localStorage.getItem('dropbox_token'),
+                'admin-own-token',
+                "generating a viewer link must never overwrite the admin's own session",
+            );
+            assert.equal(window.localStorage.getItem('dropbox_refresh_token'), 'admin-own-refresh');
+
+            assert.equal(window.document.getElementById('login-section').classList.contains('hidden'), true);
+            assert.equal(window.document.getElementById('viewer-link-result').classList.contains('hidden'), false);
+            const link = window.document.getElementById('viewer-link-output').value;
+            assert.match(link, /#tv-viewer\?at=viewer-tok&rt=viewer-rtok$/);
+            assert.equal(
+                window.document.getElementById('status').innerText,
+                'Connected',
+                "the header shouldn't say Not authenticated while the admin is actually still signed in",
+            );
+        },
+    );
+
+    await t.test(
+        'initApp() routes a returning viewer-link-generation redirect to completeViewerLinkGeneration, not the normal sign-in path',
+        () => {
+            const window = loadApp('http://localhost/?code=abc123');
+            window.localStorage.setItem('viewer_link_pkce_verifier', 'stub-verifier');
+            window.localStorage.setItem('dropbox_token', 'admin-own-token');
+            let capturedArgs = null;
+            window.completeViewerLinkGeneration = (code, verifier) => {
+                capturedArgs = [code, verifier];
+            };
+
+            window.initApp();
+
+            assert.deepEqual(capturedArgs, ['abc123', 'stub-verifier']);
+            assert.equal(
+                window.document.getElementById('app-section').classList.contains('hidden'),
+                true,
+                'must not have fallen through to showing the normal dashboard',
+            );
+        },
+    );
+
+    await t.test('the Generate Viewer Link button click is wired to generateViewerLink', () => {
+        // addEventListener('click', generateViewerLink) in
+        // bindStaticEventListeners() captures the function reference at
+        // script-eval time, so unlike initApp()'s internal call to
+        // completeViewerLinkGeneration() above, reassigning
+        // window.generateViewerLink afterward wouldn't intercept this
+        // click — instead, check the real side effect that function's
+        // synchronous prefix (before its first await) produces.
+        const window = loadApp();
+        window.switchTab('management');
+        window.switchMgmtTab('settings');
+
+        window.document.getElementById('generate-viewer-link-btn').click();
+
+        assert.ok(
+            window.localStorage.getItem('viewer_link_pkce_verifier'),
+            'clicking the button should reach generateViewerLink, same as calling it directly',
+        );
+    });
+
+    await t.test('copyViewerLink() copies the generated link via the clipboard API', async () => {
+        const window = loadApp();
+        window.document.getElementById('viewer-link-output').value = 'https://example.com/#tv-viewer?at=x';
+        let copied = null;
+        window.navigator.clipboard = { writeText: async (text) => (copied = text) };
+
+        await window.copyViewerLink();
+
+        assert.equal(copied, 'https://example.com/#tv-viewer?at=x');
+    });
+});
+
 test('DOM: keyer mode (#keyer)', async (t) => {
     await t.test('checkViewMode() shows Add Transaction but hides the nav (no route to Data Management)', () => {
         const window = loadApp();

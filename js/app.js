@@ -118,6 +118,24 @@ function applyBarWidths(container) {
     });
 }
 
+// A "viewer link" (see generateViewerLink() below) carries a read-only
+// Dropbox access/refresh token pair in the URL hash so a second device can
+// open it and be signed in immediately, without that device ever seeing
+// Dropbox's own login screen. This pulls the tokens out, stores them as
+// *this* device's own session, and scrubs them from the visible URL/
+// history immediately — before initTheme() or anything else downstream
+// reads window.location.hash, so every other hash check (isViewerHash,
+// isTvMode, checkViewMode) sees a plain "#tv-viewer", exactly like a normal
+// sign-in. Runs once, at script load, before any other top-level call.
+function importViewerTokenFromUrl() {
+    const imported = parseViewerLinkImport(window.location.hash);
+    if (!imported) return;
+    window.localStorage.setItem('dropbox_token', imported.accessToken);
+    if (imported.refreshToken) window.localStorage.setItem('dropbox_refresh_token', imported.refreshToken);
+    window.history.replaceState(null, '', window.location.pathname + window.location.search + VIEWER_HASH);
+}
+importViewerTokenFromUrl();
+
 // --- DARK MODE LOGIC ---
 // TV/viewer displays default to dark (legible on a projector or large screen
 // from a distance) until this device's operator explicitly picks a theme
@@ -351,6 +369,74 @@ async function handleAuthRedirect() {
             if (result.refreshToken) window.localStorage.setItem('dropbox_refresh_token', result.refreshToken);
             initApp();
         }
+    }
+}
+
+// Starts the OAuth flow for a *second device's* viewer link — see
+// buildViewerLinkUrl()/parseViewerLinkImport() in js/logic.js for the
+// hand-off itself. This runs from the admin's own already-authenticated
+// device, so it must not touch that device's own session: a separate PKCE
+// verifier key keeps this grant distinguishable from a normal sign-in once
+// Dropbox redirects back (see completeViewerLinkGeneration()), and nothing
+// here ever writes to the plain "dropbox_token"/"dropbox_refresh_token"
+// keys the admin's own session uses.
+async function generateViewerLink() {
+    const codeVerifier = generateRandomString(64);
+    window.localStorage.setItem('viewer_link_pkce_verifier', codeVerifier);
+    const codeChallenge = await generateCodeChallenge(codeVerifier);
+    window.location.href = storageProvider.getAuthUrl({
+        clientId: CLIENT_ID,
+        codeChallenge,
+        redirectUri: REDIRECT_URI,
+        scope: storageProvider.viewerScope,
+    });
+}
+
+// The other half of generateViewerLink(): exchanges the code Dropbox just
+// redirected back with, then shows the resulting link instead of signing
+// this device in as that viewer (this device already has its own admin
+// session, untouched throughout). Called from initApp() before it looks at
+// the admin's own accessToken, since a signed-in admin generating a link
+// would otherwise just fall straight into their own dashboard.
+async function completeViewerLinkGeneration(code, codeVerifier) {
+    window.localStorage.removeItem('viewer_link_pkce_verifier');
+    window.history.replaceState({}, document.title, window.location.pathname);
+    const result = await storageProvider.exchangeCodeForToken({
+        clientId: CLIENT_ID,
+        code,
+        redirectUri: REDIRECT_URI,
+        codeVerifier,
+    });
+    if (result) {
+        showGeneratedViewerLink(result.accessToken, result.refreshToken);
+    } else {
+        alert('Could not generate the viewer link. Please try again from Settings.');
+        window.location.reload();
+    }
+}
+
+function showGeneratedViewerLink(accessToken, refreshToken) {
+    const baseUrl = window.location.origin + window.location.pathname;
+    const url = buildViewerLinkUrl(baseUrl, accessToken, refreshToken);
+    document.getElementById('viewer-link-output').value = url;
+    document.getElementById('login-section').classList.replace('block', 'hidden');
+    document.getElementById('viewer-link-result').classList.remove('hidden');
+    // The admin's own session was never touched by generating this link —
+    // reflect that here too, rather than leaving the header's default
+    // "Not authenticated" text showing while they actually still are.
+    document.getElementById('status').innerText = 'Connected';
+}
+
+async function copyViewerLink() {
+    const input = document.getElementById('viewer-link-output');
+    try {
+        await navigator.clipboard.writeText(input.value);
+    } catch {
+        // Clipboard API can be unavailable (older browser, non-HTTPS,
+        // permission denied) — fall back to the old select-and-hope
+        // approach so the button still does something useful.
+        input.select();
+        document.execCommand('copy');
     }
 }
 
@@ -1443,6 +1529,19 @@ function startTvFieldRotation() {
 
 function initApp() {
     checkViewMode();
+
+    // A signed-in admin generating a viewer link (see generateViewerLink())
+    // still has their own dropbox_token set, so this has to be checked
+    // *before* the accessToken branch below — otherwise returning from that
+    // redirect would just fall straight into the admin's own dashboard
+    // instead of showing the generated link.
+    const viewerLinkVerifier = window.localStorage.getItem('viewer_link_pkce_verifier');
+    const code = new URLSearchParams(window.location.search).get('code');
+    if (code && viewerLinkVerifier) {
+        completeViewerLinkGeneration(code, viewerLinkVerifier);
+        return;
+    }
+
     accessToken = window.localStorage.getItem('dropbox_token');
     if (accessToken) {
         document.getElementById('login-section').classList.replace('block', 'hidden');
@@ -1481,6 +1580,9 @@ function bindStaticEventListeners() {
     document.getElementById('tv-theme-toggle').addEventListener('click', toggleDarkMode);
     document.getElementById('login-btn').addEventListener('click', startAuthFlow);
     document.getElementById('disconnect-btn').addEventListener('click', disconnectDropbox);
+    document.getElementById('generate-viewer-link-btn').addEventListener('click', generateViewerLink);
+    document.getElementById('viewer-link-copy-btn').addEventListener('click', copyViewerLink);
+    document.getElementById('viewer-link-done-btn').addEventListener('click', () => window.location.reload());
     document.getElementById('tab-dashboard').addEventListener('click', () => switchTab('dashboard'));
     document.getElementById('tab-management').addEventListener('click', () => switchTab('management'));
     document.getElementById('submit-btn').addEventListener('click', submitTransaction);
