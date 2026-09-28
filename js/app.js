@@ -24,6 +24,11 @@ const storageProvider = DropboxProvider;
 // app state stays introspectable/settable from outside the script
 // (devtools, tests) rather than living in a script-only lexical scope.
 var accessToken = null;
+// Set by updateConnectedAccountStatus() once fetchAccountInfo() resolves —
+// null until then (and if the lookup ever fails, best-effort only). Reused
+// in disconnectDropbox()'s confirmation so a deliberate disconnect names
+// the account being disconnected, not just "Dropbox" in the abstract.
+var connectedAccountEmail = null;
 var currentRev = null;
 var appData = null;
 // The active event's transaction ledger as of the last successful poll —
@@ -472,6 +477,22 @@ async function authFetch(url, buildOptions) {
     return response;
 }
 
+// Shows which Dropbox account this device is actually connected as
+// ("Connected as you@example.com" instead of just "Connected"), so a
+// device accidentally authenticated against the wrong account is obvious
+// immediately instead of silently showing an empty/unrelated event. Every
+// role requests account_info.read (even the read-only viewer), so this
+// works the same everywhere. Fire-and-forget and best-effort: a failed
+// lookup just leaves the generic "Connected" text already shown, never
+// blocks or fails the rest of startup.
+async function updateConnectedAccountStatus() {
+    const result = await storageProvider.fetchAccountInfo(authFetch, () => accessToken);
+    if (result.status !== 'ok') return;
+    connectedAccountEmail = result.email;
+    const statusEl = document.getElementById('status');
+    if (statusEl) statusEl.innerText = `Connected as ${result.email}`;
+}
+
 // A plain wrapper around window.location.reload(), used everywhere the app
 // needs to reload the page. jsdom's Location object doesn't allow
 // window.location.reload to be reassigned (it silently no-ops rather than
@@ -496,9 +517,10 @@ function handleAuthFailure() {
 // in as someone else" escape hatch: there was previously no way to drop
 // the cached Dropbox token short of clearing browser storage by hand.
 function disconnectDropbox() {
+    const accountLine = connectedAccountEmail ? ` (currently connected as ${connectedAccountEmail})` : '';
     if (
         !confirm(
-            'Disconnect from Dropbox? You will need to sign in again to view or edit this event. Nothing stored in Dropbox is affected.',
+            `Disconnect from Dropbox${accountLine}? You will need to sign in again to view or edit this event. Nothing stored in Dropbox is affected.`,
         )
     ) {
         return;
@@ -1548,6 +1570,9 @@ function initApp() {
         document.getElementById('app-section').classList.replace('hidden', 'flex');
         document.getElementById('status').innerText = 'Connected';
         document.getElementById('disconnect-btn').classList.remove('hidden');
+        document.getElementById('footer-disconnect-sep').classList.remove('hidden');
+        document.getElementById('footer-disconnect-link').classList.remove('hidden');
+        updateConnectedAccountStatus();
 
         fetchAll();
 
@@ -1602,6 +1627,11 @@ function bindStaticEventListeners() {
     document.getElementById('admin-view-link').addEventListener('click', (event) => {
         event.preventDefault();
         window.open(window.location.pathname, '_blank');
+    });
+
+    document.getElementById('footer-disconnect-link').addEventListener('click', (event) => {
+        event.preventDefault();
+        disconnectDropbox();
     });
 
     const listActions = {

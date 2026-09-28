@@ -84,6 +84,31 @@
         return { accessToken: data.access_token };
     }
 
+    // Fetches the email of whichever Dropbox account this device is
+    // actually connected as. Every role has to sign into the *same*
+    // Dropbox account to see the same event — there's no other isolation
+    // between them — so a device accidentally connected to the wrong one
+    // (a real mistake: e.g. a keyer station signing into someone's
+    // personal Dropbox instead of the organization's) would otherwise fail
+    // silently, showing an empty/unrelated event with no error at all.
+    // Surfacing the email lets that be caught immediately instead of
+    // discovered mid-event. Requires no scope beyond account_info.read,
+    // which every role (including the read-only viewer) already requests.
+    async function fetchAccountInfo(authFetch, getAccessToken) {
+        const response = await authFetch('https://api.dropboxapi.com/2/users/get_current_account', () => ({
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${getAccessToken()}`,
+                'Content-Type': 'application/json',
+            },
+            body: 'null',
+        }));
+        if (response.status === 401) return { status: 'unauthorized' };
+        if (!response.ok) return { status: 'error', error: new Error('Failed to fetch Dropbox account info') };
+        const data = await response.json();
+        return { status: 'ok', email: data.email };
+    }
+
     // Fetches the shared config file (settings/events/entities). A 409
     // means the file doesn't exist yet (a brand new App Folder) — Dropbox's
     // own "doesn't exist" convention for a conditional download, not a real
@@ -179,6 +204,7 @@
         getAuthUrl,
         exchangeCodeForToken,
         refreshAccessToken,
+        fetchAccountInfo,
         fetchConfig,
         saveConfig,
         fetchLedger,

@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.1] - 2026-09-28
+### Added
+- **Connection status now shows which Dropbox account is connected**, e.g. "Connected as you@example.com" instead of just "Connected." Every role (including the read-only viewer) already requests `account_info.read`, so this needed no new scope. Catches a device accidentally signed into the wrong Dropbox account immediately instead of it silently showing an empty or unrelated event. The Disconnect confirmation now also names the account being disconnected. Added `DropboxProvider.fetchAccountInfo()` (`js/providers/dropbox.js`).
+- **Disconnect is now also reachable from the footer**, not just the header — the header (and its existing Disconnect button) is hidden entirely in TV/Viewer display mode, which previously left no way to disconnect from that screen without clearing browser storage by hand.
+
 ## [2.4.0] - 2026-09-28
 ### Added
 - **Viewer Link: connect a second device without it ever logging into Dropbox.** Settings > Second Device now has a "Generate Viewer Link" button. It runs the same read-only OAuth grant `#tv-viewer` sign-in has always used, but instead of that device doing its own Dropbox login, the resulting access/refresh token pair is handed off through a URL — the second device just opens the link and is connected immediately, read-only, with no Dropbox screen at all on that end. The admin's own session is never touched by generating one. The tokens travel in the URL hash (never sent to any server, even this static one) rather than the query string, and the link is explicitly labeled as sensitive — anyone who has it can view the event's live totals until a new one is generated. Added `buildViewerLinkUrl()`/`parseViewerLinkImport()` (`js/logic.js`).

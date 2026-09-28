@@ -51,18 +51,6 @@ from this list — this file is only what's still outstanding.
       shared link has no expiry and isn't revoked by generating a new
       one — revoking it means unsharing the file directly in Dropbox.
 
-- [ ] **[FEATURE] Show which Dropbox account is connected, not just "Connected."**
-      Every role (Admin, `#keyer`, `#tv-viewer`) has to sign into the exact
-      same Dropbox account to see the same data — there's no other
-      isolation between them. Right now the app never shows an account
-      email anywhere, so a device authenticated against the wrong Dropbox
-      account (a real mistake: someone at a keyer station signs into their
-      own personal Dropbox instead of the organization's) fails silently —
-      it just shows an empty/unrelated event with no error. A call to
-      Dropbox's `/2/users/get_current_account` after connecting, showing the
-      email next to "Connected" (or in the Disconnect confirmation), would
-      make a mismatch obvious at setup time instead of discovered mid-event.
-
 - [ ] **[FEATURE] Google Drive as a second storage provider.** The
       fetch/save/retry orchestration in `js/app.js` (`runUpdateWithRetry`,
       the offline write queue) already only talks to the interface in

@@ -108,9 +108,17 @@ async function buildZipBuffer(entries) {
 //   - files/upload elsewhere (config)  -> succeeds with a bumped rev
 // `entryUploads` is populated in place (pass an array, inspect it after)
 // so callers don't have to thread a return value through.
-function mockDropboxFetch({ config = baseAppData(), entries = [], entryUploads = [] } = {}) {
+function mockDropboxFetch({
+    config = baseAppData(),
+    entries = [],
+    entryUploads = [],
+    accountEmail = 'organizer@example.com',
+} = {}) {
     return async (url, opts) => {
         const urlStr = String(url);
+        if (urlStr.includes('get_current_account')) {
+            return { ok: true, status: 200, json: async () => ({ email: accountEmail }) };
+        }
         if (urlStr.includes('/files/download_zip')) {
             const buffer = await buildZipBuffer(entries);
             return { ok: true, status: 200, blob: async () => buffer };
@@ -778,6 +786,108 @@ test('DOM: Dropbox disconnect', async (t) => {
 
         assert.equal(window.localStorage.getItem('dropbox_token'), null);
     });
+
+    await t.test('the confirmation names the connected account once known', () => {
+        const window = loadApp();
+        window.localStorage.setItem('dropbox_token', 'tok123');
+        window.connectedAccountEmail = 'organizer@example.com';
+        let confirmMessage = null;
+        window.confirm = (message) => {
+            confirmMessage = message;
+            return false;
+        };
+
+        window.disconnectDropbox();
+
+        assert.match(confirmMessage, /currently connected as organizer@example\.com/);
+    });
+
+    await t.test('the confirmation falls back to a plain message when the account is not yet known', () => {
+        const window = loadApp();
+        window.localStorage.setItem('dropbox_token', 'tok123');
+        let confirmMessage = null;
+        window.confirm = (message) => {
+            confirmMessage = message;
+            return false;
+        };
+
+        window.disconnectDropbox();
+
+        assert.doesNotMatch(confirmMessage, /currently connected as/);
+        assert.match(confirmMessage, /^Disconnect from Dropbox\?/);
+    });
+
+    await t.test('the footer Disconnect link becomes visible alongside the header button once connected', async () => {
+        const window = loadApp();
+        window.localStorage.setItem('dropbox_token', 'tok123');
+        window.fetch = mockDropboxFetch({ config: baseAppData() });
+
+        window.initApp();
+        await flushAsync();
+
+        assert.equal(window.document.getElementById('footer-disconnect-link').classList.contains('hidden'), false);
+        assert.equal(window.document.getElementById('footer-disconnect-sep').classList.contains('hidden'), false);
+
+        // initApp() starts a couple of setInterval polling loops once
+        // connected; close() stops them so this window doesn't keep ticking
+        // in the background for the rest of the suite (see the
+        // window.onload note in loadApp() above).
+        window.close();
+    });
+});
+
+test('DOM: connected account status (which Dropbox account is this device on)', async (t) => {
+    await t.test(
+        'updateConnectedAccountStatus() shows the account email instead of the generic "Connected"',
+        async () => {
+            const window = loadApp();
+            window.accessToken = 'tok123';
+            window.fetch = async (url) => {
+                if (String(url).includes('get_current_account')) {
+                    return { ok: true, status: 200, json: async () => ({ email: 'organizer@example.com' }) };
+                }
+                throw new Error('unexpected fetch URL: ' + url);
+            };
+
+            await window.updateConnectedAccountStatus();
+
+            assert.equal(window.document.getElementById('status').innerText, 'Connected as organizer@example.com');
+            assert.equal(window.connectedAccountEmail, 'organizer@example.com');
+        },
+    );
+
+    await t.test('a failed lookup leaves the existing status text alone instead of throwing', async () => {
+        const window = loadApp();
+        window.accessToken = 'tok123';
+        window.document.getElementById('status').innerText = 'Connected';
+        window.fetch = async () => ({ ok: false, status: 500 });
+
+        await assert.doesNotReject(window.updateConnectedAccountStatus());
+
+        assert.equal(window.document.getElementById('status').innerText, 'Connected');
+        assert.equal(window.connectedAccountEmail, null);
+    });
+
+    await t.test('initApp() triggers the account lookup once connected', async () => {
+        const window = loadApp();
+        window.localStorage.setItem('dropbox_token', 'tok123');
+        const baseFetch = mockDropboxFetch({ config: baseAppData() });
+        window.fetch = async (url, opts) => {
+            if (String(url).includes('get_current_account')) {
+                return { ok: true, status: 200, json: async () => ({ email: 'organizer@example.com' }) };
+            }
+            return baseFetch(url, opts);
+        };
+
+        window.initApp();
+        await flushAsync();
+
+        assert.equal(window.document.getElementById('status').innerText, 'Connected as organizer@example.com');
+
+        // See the close() note in the previous test group — initApp()
+        // started polling intervals that need stopping.
+        window.close();
+    });
 });
 
 // The tests above call app functions directly (window.switchTab(...), etc.),
@@ -820,6 +930,20 @@ test('DOM: event wiring (addEventListener / delegation, not direct calls)', asyn
 
         assert.equal(event.defaultPrevented, true, 'the href="#" navigation must be prevented');
         assert.equal(opened.length, 1);
+    });
+
+    await t.test('clicking the footer Disconnect link prevents navigation and reaches disconnectDropbox', () => {
+        const window = loadApp();
+        window.localStorage.setItem('dropbox_token', 'tok123');
+        window.confirm = () => true;
+        window.reloadPage = () => {};
+
+        const link = window.document.getElementById('footer-disconnect-link');
+        const event = new window.MouseEvent('click', { bubbles: true, cancelable: true });
+        link.dispatchEvent(event);
+
+        assert.equal(event.defaultPrevented, true, 'the href="#" navigation must be prevented');
+        assert.equal(window.localStorage.getItem('dropbox_token'), null);
     });
 
     await t.test('the submit button click is wired to submitTransaction (invalid input still reaches it)', () => {
@@ -1289,6 +1413,9 @@ test('DOM: multi-device viewer mode (#tv-viewer)', async (t) => {
             if (String(url).includes('oauth2/token')) {
                 return { ok: true, json: async () => ({ access_token: 'tok123', refresh_token: 'rtok123' }) };
             }
+            if (String(url).includes('get_current_account')) {
+                return { ok: true, status: 200, json: async () => ({ email: 'organizer@example.com' }) };
+            }
             if (String(url).includes('/files/download_zip')) {
                 return { ok: true, status: 200, blob: async () => buildZipBuffer([]) };
             }
@@ -1304,6 +1431,7 @@ test('DOM: multi-device viewer mode (#tv-viewer)', async (t) => {
         };
 
         await window.handleAuthRedirect();
+        await flushAsync();
 
         assert.equal(window.location.hash, '#tv-viewer', 'the viewer hash should be restored after the redirect');
         assert.equal(window.localStorage.getItem('post_auth_hash'), null, 'the stashed hash should be consumed');

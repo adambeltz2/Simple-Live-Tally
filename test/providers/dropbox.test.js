@@ -122,6 +122,29 @@ test('DropboxProvider.refreshAccessToken', async (t) => {
     });
 });
 
+test('DropboxProvider.fetchAccountInfo', async (t) => {
+    await t.test('maps a successful lookup to { status: "ok", email }', async () => {
+        const authFetch = stubAuthFetch({
+            status: 200,
+            ok: true,
+            json: async () => ({ account_id: 'abc', email: 'organizer@example.com' }),
+        });
+        const result = await DropboxProvider.fetchAccountInfo(authFetch, () => 'tok');
+        assert.deepEqual(result, { status: 'ok', email: 'organizer@example.com' });
+        assert.equal(stubAuthFetch.lastUrl, 'https://api.dropboxapi.com/2/users/get_current_account');
+        assert.equal(stubAuthFetch.lastOptions.headers.Authorization, 'Bearer tok');
+    });
+
+    await t.test('maps a 401 to unauthorized and any other failure to a generic error', async () => {
+        const unauthorized = await DropboxProvider.fetchAccountInfo(stubAuthFetch({ status: 401 }), () => 'tok');
+        assert.deepEqual(unauthorized, { status: 'unauthorized' });
+
+        const result = await DropboxProvider.fetchAccountInfo(stubAuthFetch({ status: 500, ok: false }), () => 'tok');
+        assert.equal(result.status, 'error');
+        assert.ok(result.error instanceof Error);
+    });
+});
+
 test('DropboxProvider.fetchConfig', async (t) => {
     await t.test('maps a successful download to { status: "ok", data, rev }', async () => {
         const authFetch = stubAuthFetch({
