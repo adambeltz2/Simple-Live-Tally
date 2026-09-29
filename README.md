@@ -18,9 +18,9 @@ Just open that page and sign in with **your own** Dropbox account. Because of th
 
 ## Screenshots
 
-**Live Dashboard** — the leaderboard operators and guests watch update in real time, with an animated goal gauge and a large, tabular-numeral team ranking built to be read at a glance.
+**Live Dashboard** — the leaderboard operators and guests watch update in real time, with an animated goal bar and a large, tabular-numeral team ranking built to be read at a glance.
 
-![Live Dashboard showing a leaderboard of five teams with a fundraising goal gauge](docs/screenshots/dashboard.png)
+![Live Dashboard showing a leaderboard of five teams with a fundraising goal bar](docs/screenshots/dashboard.png)
 
 **TV / Projector Display Mode** — append `#tv` to the URL for a high-contrast, full-bleed layout built for 1080p screens.
 
