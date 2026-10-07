@@ -49,6 +49,13 @@ var refreshTimer = 60;
 var countdownInterval = null;
 var currentMgmtTab = 'settings';
 var isSubmittingTransaction = false;
+// The logicalId of the one entry *this device* most recently submitted via
+// submitTransaction(), or null — drives the "Undo last entry" button, the
+// only correction path reachable from a #keyer station (it never gets Data
+// Management nav — see checkViewMode()). Replaced by a new submission,
+// cleared once undone. In-memory only, like isSubmittingTransaction above:
+// a reload loses it, same as the keyer losing track of what they just did.
+var lastSubmittedLogicalId = null;
 // Which page of the "field" grid the TV display is currently showing, once
 // a roster is large enough to need one (see the spotlight+field tier in
 // renderApp() and startTvFieldRotation() below). Clamped by modulo against
@@ -62,9 +69,20 @@ var tvFieldRotationInterval = null;
 // Every item is a bare "attempt" closure — () => Promise<{status, ...}> —
 // whether it's a config save (wraps runUpdateWithRetry) or a single
 // transaction-entry upload, so flushPendingWrites can run any of them the
-// same way. In-memory only: a page reload loses anything still queued.
+// same way. Mostly in-memory only — a page reload loses any *config* save
+// still queued here — but a transaction-entry retry closure is additionally
+// tagged with `.pendingEntry` (the plain, JSON-serializable entry it
+// retries) so persistPendingTransactionQueue() can mirror just that subset
+// to localStorage; see restorePendingTransactionQueue() below for the other
+// half. Config saves aren't persisted the same way: unlike a transaction
+// entry, an update is an arbitrary in-memory mutator function
+// (updateDataWrapper's updateFn), not a serializable value.
 var pendingQueue = [];
 var isFlushingQueue = false;
+
+// localStorage key for the persisted subset of pendingQueue described
+// above — see persistPendingTransactionQueue()/restorePendingTransactionQueue().
+const PENDING_TX_QUEUE_KEY = 'pending_tx_entries';
 
 const defaultData = {
     settings: { title: 'Simple Live Tally', logoUrl: '', themeColor: 'bg-blue-600' },
@@ -420,10 +438,32 @@ async function completeViewerLinkGeneration(code, codeVerifier) {
     }
 }
 
+// Renders `url` as a scannable QR code into #viewer-link-qr, so connecting
+// the second device can be "point its camera at this" instead of typing or
+// transferring a long URL with embedded tokens by hand. Uses the vendored
+// js/vendor/qrcode.js (the `qrcode` global) rather than a CDN — see
+// js/vendor/README.md for why. Fixed black-on-white regardless of the
+// admin's own dark/light theme: QR scanners rely on that contrast, so this
+// is the one piece of UI that deliberately ignores applyThemeColor().
+function renderViewerLinkQr(url) {
+    const container = document.getElementById('viewer-link-qr');
+    const qr = qrcode(0, 'M');
+    qr.addData(url);
+    qr.make();
+    container.innerHTML = qr.createSvgTag({
+        cellSize: 4,
+        margin: 4,
+        scalable: true,
+        alt: 'QR code encoding the viewer link',
+        title: 'Viewer link QR code',
+    });
+}
+
 function showGeneratedViewerLink(accessToken, refreshToken) {
     const baseUrl = window.location.origin + window.location.pathname;
     const url = buildViewerLinkUrl(baseUrl, accessToken, refreshToken);
     document.getElementById('viewer-link-output').value = url;
+    renderViewerLinkQr(url);
     document.getElementById('login-section').classList.replace('block', 'hidden');
     document.getElementById('viewer-link-result').classList.remove('hidden');
     // The admin's own session was never touched by generating this link —
@@ -658,10 +698,56 @@ async function saveTransactionEntry(entry) {
     const result = await attemptTransactionEntrySave(entry);
     if (result.status !== 'success') {
         console.error('Error writing transaction entry, queueing for retry:', result.error);
-        pendingQueue.push(() => attemptTransactionEntrySave(entry));
+        const attempt = () => attemptTransactionEntrySave(entry);
+        attempt.pendingEntry = entry;
+        pendingQueue.push(attempt);
         renderPendingIndicator();
+        persistPendingTransactionQueue();
     }
     return result;
+}
+
+// Mirrors the transaction-entry retries currently in pendingQueue (tagged
+// with .pendingEntry — see the var pendingQueue comment above) to
+// localStorage, so a reload or crash mid-outage doesn't silently drop a
+// donation that was entered but never made it to Dropbox. Called after
+// every pendingQueue mutation that could add or remove one of these:
+// saveTransactionEntry() queueing a new failure, and flushPendingWrites()
+// clearing out whatever just succeeded.
+function persistPendingTransactionQueue() {
+    const entries = pendingQueue.filter((fn) => fn.pendingEntry).map((fn) => fn.pendingEntry);
+    if (entries.length === 0) {
+        window.localStorage.removeItem(PENDING_TX_QUEUE_KEY);
+    } else {
+        window.localStorage.setItem(PENDING_TX_QUEUE_KEY, JSON.stringify(entries));
+    }
+}
+
+// The other half of persistPendingTransactionQueue() — called once from
+// initApp(), before the first fetchAll(), so anything still queued from a
+// prior session reappears in the totals/transactions list immediately
+// instead of only after its retry eventually succeeds. Malformed storage
+// (a hand-edited value, a future format) is treated as empty rather than
+// thrown on, since this is best-effort recovery, not a source of truth —
+// the real source of truth is always Dropbox.
+function restorePendingTransactionQueue() {
+    const raw = window.localStorage.getItem(PENDING_TX_QUEUE_KEY);
+    if (!raw) return;
+    let entries;
+    try {
+        entries = JSON.parse(raw);
+        if (!Array.isArray(entries)) throw new Error('not an array');
+    } catch {
+        window.localStorage.removeItem(PENDING_TX_QUEUE_KEY);
+        return;
+    }
+    entries.forEach((entry) => {
+        localTransactionEntries.push(entry);
+        const attempt = () => attemptTransactionEntrySave(entry);
+        attempt.pendingEntry = entry;
+        pendingQueue.push(attempt);
+    });
+    if (entries.length > 0) renderPendingIndicator();
 }
 
 // Loads the config file and the active event's transaction ledger together
@@ -819,6 +905,7 @@ async function flushPendingWrites() {
     } finally {
         isFlushingQueue = false;
         renderPendingIndicator();
+        persistPendingTransactionQueue();
     }
 }
 
@@ -1034,7 +1121,7 @@ function submitTransaction() {
 
     if (!entityId || !isValidTransactionAmount(amount)) {
         msg.textContent = 'Select a team and enter a positive amount.';
-        msg.className = 'text-sm mt-2 text-red-600 block';
+        msg.className = 'text-sm text-red-600 block';
         return;
     }
     isSubmittingTransaction = true;
@@ -1063,7 +1150,7 @@ function submitTransaction() {
 
         if (result.status === 'success') {
             msg.textContent = 'Transaction saved.';
-            msg.className = 'text-sm mt-2 text-green-600 block';
+            msg.className = 'text-sm text-green-600 block';
             document.getElementById('amount-input').value = '';
             setTimeout(() => {
                 msg.className = 'hidden';
@@ -1073,7 +1160,71 @@ function submitTransaction() {
             // Queued rather than alerted — the entry itself isn't lost
             // (already visible via localTransactionEntries), just delayed.
             msg.textContent = "Couldn't save right now — queued, will retry automatically.";
-            msg.className = 'text-sm mt-2 text-yellow-600 block';
+            msg.className = 'text-sm text-yellow-600 block';
+        }
+
+        lastSubmittedLogicalId = entryId;
+        updateUndoButtonVisibility();
+    });
+}
+
+function updateUndoButtonVisibility() {
+    const btn = document.getElementById('undo-last-entry-btn');
+    if (btn) btn.classList.toggle('hidden', !lastSubmittedLogicalId);
+}
+
+// Deletes (via a negation entry, same as deleteTransaction() below — nothing
+// in this ledger is ever edited/removed in place) whichever single entry
+// this device most recently submitted through submitTransaction(). The only
+// correction path reachable from a #keyer station, which never gets Data
+// Management nav; see the lastSubmittedLogicalId comment above for why it's
+// scoped to just "the last one" rather than a general undo stack.
+function undoLastEntry() {
+    if (!lastSubmittedLogicalId) return;
+
+    const currentEntries = getVisibleTransactionEntries().filter((e) => e.logicalId === lastSubmittedLogicalId);
+    if (currentEntries.length === 0) {
+        lastSubmittedLogicalId = null;
+        updateUndoButtonVisibility();
+        return;
+    }
+    const currentNet = currentEntries.reduce((sum, e) => sum + e.amount, 0);
+    const entity = appData.entities.find((e) => e.id === currentEntries[0].entityId);
+    const entityLabel = isGeneralFundEntry(currentEntries[0].entityId)
+        ? GENERAL_FUND_LABEL
+        : entity
+          ? entity.namePublic
+          : 'that team';
+    if (!confirm(`Undo the last entry — $${currentNet.toFixed(2)} to ${entityLabel}?`)) return;
+
+    const newEntry = {
+        id: makeEntryId(),
+        logicalId: lastSubmittedLogicalId,
+        kind: 'delete',
+        entityId: currentEntries[0].entityId,
+        eventId: currentEntries[0].eventId,
+        amount: computeDeleteAmount(currentNet),
+        createDate: new Date().toISOString(),
+        createdBy: ensureDeviceLabel(),
+    };
+
+    lastSubmittedLogicalId = null;
+    updateUndoButtonVisibility();
+    localTransactionEntries.push(newEntry);
+    renderApp();
+    renderManagement();
+
+    const msg = document.getElementById('entry-message');
+    saveTransactionEntry(newEntry).then((result) => {
+        if (result.status === 'success') {
+            msg.textContent = 'Last entry undone.';
+            msg.className = 'text-sm text-green-600 block';
+            setTimeout(() => {
+                msg.className = 'hidden';
+            }, 3000);
+        } else {
+            msg.textContent = "Couldn't undo right now — queued, will retry automatically.";
+            msg.className = 'text-sm text-yellow-600 block';
         }
     });
 }
@@ -1581,6 +1732,13 @@ function initApp() {
         document.getElementById('footer-disconnect-link').classList.remove('hidden');
         updateConnectedAccountStatus();
 
+        // Before the first fetchAll(), so anything left over from a prior
+        // session's unconfirmed writes (reload/crash mid-outage) is already
+        // in localTransactionEntries/pendingQueue when that first render
+        // happens, instead of silently missing until its retry succeeds.
+        restorePendingTransactionQueue();
+        flushPendingWrites();
+
         fetchAll();
 
         setInterval(() => {
@@ -1618,6 +1776,7 @@ function bindStaticEventListeners() {
     document.getElementById('tab-dashboard').addEventListener('click', () => switchTab('dashboard'));
     document.getElementById('tab-management').addEventListener('click', () => switchTab('management'));
     document.getElementById('submit-btn').addEventListener('click', submitTransaction);
+    document.getElementById('undo-last-entry-btn').addEventListener('click', undoLastEntry);
     document.getElementById('active-event-select').addEventListener('change', changeActiveEvent);
     document.getElementById('export-zip-btn').addEventListener('click', exportDataZip);
     document.getElementById('pending-writes-indicator').addEventListener('click', flushPendingWrites);

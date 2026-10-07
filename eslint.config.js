@@ -53,7 +53,9 @@ module.exports = [
     js.configs.recommended,
     prettierConfig,
     {
-        ignores: ['node_modules/**', 'css/tailwind.css'],
+        // js/vendor/** is a vendored third-party library, not this repo's
+        // code — see js/vendor/README.md.
+        ignores: ['node_modules/**', 'css/tailwind.css', 'js/vendor/**'],
     },
     {
         // js/logic.js and js/providers/*.js: run in both the browser (plain
@@ -83,6 +85,7 @@ module.exports = [
                 ...logicGlobals,
                 ...providerGlobals,
                 JSZip: 'readonly',
+                qrcode: 'readonly',
             },
         },
     },

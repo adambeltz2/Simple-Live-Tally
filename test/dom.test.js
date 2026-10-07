@@ -15,6 +15,7 @@ const { JSDOM } = require('jsdom');
 const JSZipNode = require('jszip');
 
 const HTML_SOURCE = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+const QRCODE_SOURCE = fs.readFileSync(path.join(__dirname, '../js/vendor/qrcode.js'), 'utf8');
 const LOGIC_SOURCE = fs.readFileSync(path.join(__dirname, '../js/logic.js'), 'utf8');
 const DROPBOX_PROVIDER_SOURCE = fs.readFileSync(path.join(__dirname, '../js/providers/dropbox.js'), 'utf8');
 const APP_SOURCE = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
@@ -38,10 +39,11 @@ function loadApp(url) {
     // happens to touch it.
     window.URL.createObjectURL = () => 'blob:mock';
     window.URL.revokeObjectURL = () => {};
-    // Same order as index.html's <script> tags: js/logic.js, then the active
-    // storage provider, then js/app.js. app.js wires all its event listeners
-    // (bindStaticEventListeners) as a top-level statement, so evaluating it
-    // here reproduces real page load.
+    // Same order as index.html's <script> tags: the vendored QR library,
+    // js/logic.js, then the active storage provider, then js/app.js. app.js
+    // wires all its event listeners (bindStaticEventListeners) as a
+    // top-level statement, so evaluating it here reproduces real page load.
+    window.eval(QRCODE_SOURCE);
     window.eval(LOGIC_SOURCE);
     window.eval(DROPBOX_PROVIDER_SOURCE);
     window.eval(APP_SOURCE);
@@ -1099,6 +1101,82 @@ test('DOM: transaction ledger (create/edit/delete as immutable entries)', async 
         assert.equal(uploads[0].body.logicalId, uploads[0].body.id, 'a create entry is its own logicalId');
     });
 
+    await t.test('the Undo button appears only after a submission, and undoLastEntry negates it', async () => {
+        // This is the only correction path reachable from a #keyer station
+        // (it never gets Data Management nav — see checkViewMode()), so
+        // this exercises it the same way: no switchTab('management') call.
+        const window = loadApp();
+        window.confirm = () => true;
+        window.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.accessToken = 'fake-token';
+        window.renderApp();
+        const undoBtn = window.document.getElementById('undo-last-entry-btn');
+        assert.equal(undoBtn.classList.contains('hidden'), true, 'nothing to undo yet');
+
+        const uploads = [];
+        window.fetch = mockDropboxFetch({ entryUploads: uploads });
+        window.document.getElementById('entity-select').value = 'Team A';
+        window.document.getElementById('amount-input').value = '25';
+        window.submitTransaction();
+        await flushAsync();
+
+        assert.equal(undoBtn.classList.contains('hidden'), false, 'should appear once there is something to undo');
+        const createdId = uploads[0].body.id;
+
+        window.undoLastEntry();
+        await flushAsync();
+
+        assert.equal(uploads.length, 2);
+        assert.equal(uploads[1].body.kind, 'delete');
+        assert.equal(uploads[1].body.logicalId, createdId, 'the undo must target the exact entry just created');
+        assert.equal(uploads[1].body.amount, -25);
+        assert.equal(
+            window.computeTotals(window.appData.entities, window.getVisibleTransactionEntries(), 'evt1')['e1'],
+            0,
+            'the net total should be back to zero after undo',
+        );
+        assert.equal(
+            undoBtn.classList.contains('hidden'),
+            true,
+            'should hide again once undone — nothing left to undo twice',
+        );
+        assert.match(window.document.getElementById('entry-message').textContent, /undone/i);
+    });
+
+    await t.test('undoLastEntry does nothing without a confirmed prompt, and nothing if never submitted', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.accessToken = 'fake-token';
+        let fetchCalled = false;
+        window.fetch = async () => {
+            fetchCalled = true;
+            return { ok: true, status: 200, json: async () => ({ rev: 'rev1' }) };
+        };
+
+        // Nothing submitted yet — undoLastEntry() must be a safe no-op.
+        assert.doesNotThrow(() => window.undoLastEntry());
+        assert.equal(fetchCalled, false);
+
+        // Something submitted, but declining the confirm must not delete it.
+        window.lastSubmittedLogicalId = 'tx1';
+        window.transactionEntries = [
+            Object.assign(
+                { id: 'tx1', logicalId: 'tx1', kind: 'create', entityId: 'e1', eventId: 'evt1', createdBy: 'Admin' },
+                { amount: 15, createDate: new Date().toISOString() },
+            ),
+        ];
+        window.confirm = () => false;
+
+        window.undoLastEntry();
+
+        assert.equal(fetchCalled, false, 'declining the confirm must not write anything');
+        assert.equal(window.lastSubmittedLogicalId, 'tx1', 'declining must leave the undo target in place');
+    });
+
     await t.test('editTransactionAmount writes a delta entry, not an overwrite', async () => {
         const window = loadApp();
         window.appData = baseAppData({
@@ -1213,6 +1291,14 @@ test('DOM: transaction ledger (create/edit/delete as immutable entries)', async 
         const indicator = window.document.getElementById('pending-writes-indicator');
         assert.equal(indicator.classList.contains('hidden'), false);
         assert.match(indicator.textContent, /1 pending/);
+
+        // persistPendingTransactionQueue() — a reload or crash mid-outage
+        // must not silently drop the queued entry (see restorePendingTransactionQueue()
+        // and the "survives a simulated reload" test below).
+        const persisted = JSON.parse(window.localStorage.getItem('pending_tx_entries'));
+        assert.equal(persisted.length, 1);
+        assert.equal(persisted[0].amount, 10);
+        assert.equal(persisted[0].entityId, 'e1');
     });
 
     await t.test('flushPendingWrites drains a queued entry once saves succeed again', async () => {
@@ -1242,6 +1328,62 @@ test('DOM: transaction ledger (create/edit/delete as immutable entries)', async 
             true,
             'the indicator should hide once the queue is empty',
         );
+        assert.equal(
+            window.localStorage.getItem('pending_tx_entries'),
+            null,
+            'a drained queue should not leave stale entries behind in storage',
+        );
+    });
+
+    await t.test('a queued entry survives a simulated reload (restorePendingTransactionQueue)', async () => {
+        // First window: queue a write that fails, same as the "network
+        // failure" test above, so something real lands in localStorage.
+        const firstWindow = loadApp();
+        firstWindow.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        firstWindow.accessToken = 'fake-token';
+        firstWindow.renderApp();
+        firstWindow.fetch = async () => ({ ok: false, status: 500 });
+        firstWindow.document.getElementById('entity-select').value = 'Team A';
+        firstWindow.document.getElementById('amount-input').value = '42';
+        firstWindow.submitTransaction();
+        await flushAsync();
+        assert.equal(firstWindow.pendingQueue.length, 1, 'sanity check: the write should be queued first');
+        const persistedRaw = firstWindow.localStorage.getItem('pending_tx_entries');
+
+        // Second window: a fresh jsdom window/localStorage, simulating a
+        // reload — carry over only what a real reload would (localStorage).
+        const secondWindow = loadApp();
+        secondWindow.localStorage.setItem('pending_tx_entries', persistedRaw);
+        secondWindow.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+
+        secondWindow.restorePendingTransactionQueue();
+
+        assert.equal(secondWindow.pendingQueue.length, 1, 'the retry attempt should be rebuilt from storage');
+        assert.equal(
+            secondWindow.localTransactionEntries.length,
+            1,
+            'the entry should be visible again, not just queued silently',
+        );
+        assert.equal(secondWindow.localTransactionEntries[0].amount, 42);
+        assert.equal(
+            secondWindow.document.getElementById('pending-writes-indicator').classList.contains('hidden'),
+            false,
+            'the indicator should reflect the restored queue immediately',
+        );
+    });
+
+    await t.test('restorePendingTransactionQueue() treats malformed storage as empty rather than throwing', () => {
+        const window = loadApp();
+        window.localStorage.setItem('pending_tx_entries', 'not valid json{{{');
+
+        assert.doesNotThrow(() => window.restorePendingTransactionQueue());
+
+        assert.equal(window.pendingQueue.length, 0);
+        assert.equal(window.localStorage.getItem('pending_tx_entries'), null, 'the bad value should be cleared out');
     });
 
     await t.test('getVisibleTransactionEntries merges locally-created entries a poll has not confirmed yet', () => {
@@ -1575,8 +1717,28 @@ test('DOM: viewer link hand-off (second device with no Dropbox login of its own)
                 'Connected',
                 "the header shouldn't say Not authenticated while the admin is actually still signed in",
             );
+
+            const qrContainer = window.document.getElementById('viewer-link-qr');
+            assert.match(qrContainer.innerHTML, /<svg/, 'the viewer link should also render as a scannable QR code');
+            assert.match(
+                qrContainer.innerHTML,
+                /<path d="M\d/,
+                'the SVG must contain actual module data, not an empty shell',
+            );
         },
     );
+
+    await t.test('renderViewerLinkQr() encodes the actual URL, not a fixed placeholder', () => {
+        const window = loadApp();
+
+        window.renderViewerLinkQr('https://example.com/#tv-viewer?at=AAAA&rt=AAAA');
+        const shortLinkSvg = window.document.getElementById('viewer-link-qr').innerHTML;
+
+        window.renderViewerLinkQr('https://example.com/#tv-viewer?at=' + 'B'.repeat(200) + '&rt=' + 'C'.repeat(200));
+        const longLinkSvg = window.document.getElementById('viewer-link-qr').innerHTML;
+
+        assert.notEqual(shortLinkSvg, longLinkSvg, 'a longer/different URL must encode to different module data');
+    });
 
     await t.test(
         'initApp() routes a returning viewer-link-generation redirect to completeViewerLinkGeneration, not the normal sign-in path',

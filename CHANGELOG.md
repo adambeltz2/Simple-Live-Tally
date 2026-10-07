@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-10-07
+### Added
+- **The generated Viewer Link now also renders as a scannable QR code**, alongside the existing copyable URL — point the second device's camera at it instead of copy/pasting or AirDropping a long URL with embedded tokens. Uses a small vendored QR library (`js/vendor/qrcode.js`, MIT-licensed, no CSP changes needed — see `js/vendor/README.md`) rather than a CDN, so it keeps working even on a venue network that can't reach one. Added `renderViewerLinkQr()` (`js/app.js`).
+- **`#keyer` stations can now undo the one entry they just submitted.** An "Undo last entry" link appears next to the save confirmation and writes the same kind of negation entry Data Management's own Delete does — the only correction path reachable from a keyer screen, since it never gets Data Management nav. Added `undoLastEntry()` (`js/app.js`).
+- **A queued transaction write now survives a reload.** Previously, an entry that failed to save (bad Wi-Fi, a brief Dropbox outage) was queued for automatic retry only in memory — an accidental page reload or browser crash during the outage silently dropped it. The queue is now mirrored to `localStorage` and restored on the next load. Config-save retries (Settings/Teams/Events edits) are unaffected and still in-memory only, since those are an arbitrary in-memory mutation rather than a serializable value. Added `persistPendingTransactionQueue()`/`restorePendingTransactionQueue()` (`js/app.js`).
+
 ## [2.4.2] - 2026-09-28
 ### Changed
 - **The scrolling top ticker now shows up to the top 25 leaders before looping**, up from 5. Its scroll speed now scales with the leader count (5s per entry, matching the original 5-entry/25s pace) so a full board doesn't just fly by faster.

@@ -7,7 +7,9 @@
     <!-- Content-Security-Policy: no 'unsafe-inline' anywhere — every script
          and stylesheet is a same-origin file (or the pinned JSZip CDN
          script), and all DOM event wiring goes through addEventListener
-         rather than onclick="..." attributes (see js/app.js). -->
+         rather than onclick="..." attributes (see js/app.js). The QR code
+         library (js/vendor/qrcode.js) is vendored rather than CDN-loaded —
+         see js/vendor/README.md — so it needs no script-src exception. -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
         script-src 'self' https://cdnjs.cloudflare.com;
@@ -23,6 +25,7 @@
     <link rel="stylesheet" href="css/tailwind.css">
     <link rel="stylesheet" href="css/app.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="js/vendor/qrcode.js"></script>
 </head>
 <body id="body" class="bg-gray-100 dark:bg-gray-950 text-gray-800 dark:text-gray-100 font-sans transition-colors duration-300 h-dvh overflow-hidden flex flex-col">
 
@@ -79,6 +82,10 @@
         <div id="viewer-link-result" class="hidden p-8 text-center my-auto max-w-lg mx-auto">
             <p class="mb-3 font-semibold text-gray-900 dark:text-white">Viewer link ready</p>
             <p class="mb-4 text-sm text-gray-600 dark:text-gray-400">Open this link on the second device — it connects automatically, read-only, with no Dropbox login needed there. Keep it private: anyone with this link can view this event's live totals until you generate a new one.</p>
+            <!-- Populated by renderViewerLinkQr() in js/app.js (js/vendor/qrcode.js)
+                 right after showGeneratedViewerLink() sets the text link below —
+                 scanning beats typing a long URL into a lobby TV's browser. -->
+            <div id="viewer-link-qr" class="w-44 h-44 mx-auto mb-4 p-2 bg-white rounded-lg shadow-sm"></div>
             <div class="flex gap-2 mb-4">
                 <input type="text" id="viewer-link-output" readonly class="min-w-0 flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-xs shadow-inner bg-white dark:bg-gray-700 outline-none">
                 <button id="viewer-link-copy-btn" class="flex-shrink-0 bg-blue-600 hover:opacity-90 text-white font-semibold py-2 px-4 rounded text-sm">Copy</button>
@@ -125,7 +132,14 @@
                             Submit Vote
                         </button>
                     </div>
-                    <div id="entry-message" class="text-sm mt-3 hidden font-medium"></div>
+                    <div class="flex items-center gap-3 mt-3">
+                        <div id="entry-message" class="text-sm hidden font-medium"></div>
+                        <!-- Undo the one entry this device just submitted — the only
+                             correction path reachable from a #keyer station, which
+                             never gets Data Management nav (see checkViewMode() in
+                             js/app.js). Shown/hidden by submitTransaction()/undoLastEntry(). -->
+                        <button id="undo-last-entry-btn" type="button" class="hidden text-sm text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 underline">Undo last entry</button>
+                    </div>
                 </div>
 
                 <!-- Leaderboard & Gauge -->
@@ -269,7 +283,7 @@
 
     <!-- Footer -->
     <footer id="main-footer" class="flex-shrink-0 text-center text-sm text-gray-500 py-4 mt-auto">
-        <p class="font-medium">Simple Live Tally <span class="font-bold">v2.4.2</span></p>
+        <p class="font-medium">Simple Live Tally <span class="font-bold">v2.5.0</span></p>
         <p class="mt-1 space-x-2">
             <a href="https://github.com/adambeltz2/Simple-Live-Tally" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">GitHub</a>
             <span>|</span>

@@ -1,6 +1,8 @@
 node_modules/
 package-lock.json
 css/tailwind.css
+# Vendored third-party library, not this repo's code — see js/vendor/README.md.
+js/vendor/
 # index.html is intentionally left to hand-formatting: reformatting the
 # whole file (markup + inline script together) risks a large, low-value
 # diff. Only the standalone .js files are Prettier-formatted.
