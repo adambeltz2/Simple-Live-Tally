@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.2] - 2026-10-12
+### Added
+- **A "Saving…" indicator now shows during Settings/Team/Event changes.** Save Changes, Add, Remove, Factory Reset, and switching the active event all go through a real fetch-then-save round trip to Dropbox (unlike a transaction entry's single write), which could take a visible moment with no feedback that anything was happening. Added `setSavingIndicator()` (`js/app.js`), driven centrally from `updateDataWrapper()` so every caller gets it for free.
+
 ## [2.5.1] - 2026-10-12
 ### Fixed
 - **The Viewer Link QR code was unreadable noise for a real Dropbox token pair.** It was verified against short placeholder tokens during development; Dropbox's actual short-lived access tokens run 150-200+ characters each, needing a 60-80+ module QR grid that was being crammed into a fixed 176px box — well below the ~4px-per-module floor a camera needs to resolve it. The container now sizes itself off the real module count (clamped between 176px and 360px), and the error-correction level dropped from M to L (this code is scanned once off a screen, not printed and exposed to wear, so the extra redundancy was just adding density for no benefit).

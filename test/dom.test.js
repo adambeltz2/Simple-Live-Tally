@@ -784,6 +784,70 @@ test('DOM: per-event branding (logo/theme color)', async (t) => {
     });
 });
 
+test('DOM: saving indicator (Settings/Teams/Events round trip)', async (t) => {
+    await t.test('updateDataWrapper() shows #saving-indicator only while the round trip is in flight', async () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.accessToken = 'fake-token';
+        const indicator = window.document.getElementById('saving-indicator');
+        assert.equal(indicator.classList.contains('hidden'), true, 'sanity check: hidden before anything happens');
+
+        // Hold the save open under our own control so there's a real window
+        // to assert "visible" in, rather than racing a fixed timeout against
+        // however fast the mock resolves.
+        let resolveUpload;
+        const uploadPromise = new Promise((resolve) => {
+            resolveUpload = resolve;
+        });
+        window.fetch = async (url) => {
+            if (String(url).includes('/files/download')) {
+                return {
+                    ok: true,
+                    status: 200,
+                    headers: { get: () => JSON.stringify({ rev: 'rev1' }) },
+                    json: async () => window.appData,
+                };
+            }
+            if (String(url).includes('/files/upload')) {
+                await uploadPromise;
+                return { ok: true, status: 200, json: async () => ({ rev: 'rev-next' }) };
+            }
+            throw new Error('unexpected fetch URL: ' + url);
+        };
+
+        const updatePromise = window.updateDataWrapper(() => {
+            window.appData.settings.title = 'Renamed';
+        });
+        await flushAsync();
+
+        assert.equal(indicator.classList.contains('hidden'), false, 'should be visible while the save is in flight');
+
+        resolveUpload();
+        await updatePromise;
+
+        assert.equal(indicator.classList.contains('hidden'), true, 'should hide again once the save settles');
+    });
+
+    await t.test('the indicator still hides even when the save fails outright', async () => {
+        const window = loadApp();
+        window.appData = baseAppData();
+        window.accessToken = 'fake-token';
+        window.fetch = async () => ({ ok: false, status: 500 });
+
+        await window.updateDataWrapper(() => {
+            window.appData.settings.title = 'Renamed';
+        });
+
+        assert.equal(
+            window.document.getElementById('saving-indicator').classList.contains('hidden'),
+            true,
+            'a failed/queued save must not leave the indicator stuck showing',
+        );
+    });
+});
+
 test('DOM: Dropbox disconnect', async (t) => {
     await t.test('does nothing if the operator cancels the confirmation', () => {
         const window = loadApp();

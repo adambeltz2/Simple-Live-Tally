@@ -1,7 +1,5 @@
 # Simple Live Tally
 
-[![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://www.buymeacoffee.com/adambeltz)
-
 **Simple Live Tally** is a serverless, near real-time fundraising and voting display web application designed for live events. It uses a **Bring-Your-Own-Storage (BYOS)** architecture, running entirely as a static site on GitHub Pages and storing all data securely inside your own personal Dropbox account using an App Folder.
 
 ---
@@ -153,10 +151,12 @@ The deployed app is plain static files, but a couple of dev-only tools live behi
 ```bash
 npm install           # dev dependencies only (tailwindcss, eslint, prettier, ...)
 npm test              # runs the test/ suite (Node's built-in test runner)
-npm run lint          # ESLint — covers js/app.js, js/logic.js, test/*.js
-npm run format        # Prettier — formats js/app.js, js/logic.js, and test/*.js (not index.html, see below)
+npm run lint          # ESLint — covers js/app.js, js/logic.js, js/providers/*.js, test/**/*.js
+npm run format        # Prettier — same files as lint (not index.html, see below)
 npm run format:check  # same, but only checks — this is what CI runs
 ```
+
+`js/vendor/` (a vendored third-party library — see `js/vendor/README.md`) is deliberately excluded from both, since it isn't this project's code.
 
 ### Rebuilding the stylesheet
 
@@ -176,6 +176,8 @@ and commit the updated `css/tailwind.css`. Classes not present in the compiled s
 
 `index.html` sets a strict CSP with no `'unsafe-inline'` anywhere. That's why the app's logic lives in `js/app.js` (an external script) instead of an inline `<script>` block, its custom CSS lives in `css/app.css` instead of an inline `<style>` block, and every interactive element is wired up via `addEventListener` in `bindStaticEventListeners()` (`js/app.js`) instead of `onclick="..."`/`onchange="..."` attributes — dynamically-rendered lists (events/entities/transactions) use one delegated click listener per container (`data-action`/`data-id` attributes) rather than re-binding on every render. If you fork this and add a new interactive element, follow the same pattern: give it an `id` (or `data-action` for a dynamically-rendered one) and wire it in `bindStaticEventListeners()`, rather than reaching for `onclick="..."`.
 
+The CSP's `script-src` only allows `'self'` and the pinned JSZip CDN script — that's the one exception, since building a ZIP export client-side has no native browser API. Every other third-party script, including the QR code library behind the Viewer Link's scannable code, is vendored into `js/vendor/` and loaded same-origin instead of adding another CDN exception — see `js/vendor/README.md`.
+
 ---
 
 ## Project Status & Roadmap
@@ -186,3 +188,7 @@ This project tracks its own history and open work in two files, kept in sync wit
 * **[`BACKLOG.md`](./BACKLOG.md)** — known follow-ups and enhancements not yet built, grouped by area (security, reliability, code quality, product/docs).
 
 The pattern for any fix or enhancement: log it in `CHANGELOG.md` when it ships, and if it started life as a backlog item, remove it from `BACKLOG.md` in the same change. This keeps both files an accurate record instead of stale wishlists.
+
+---
+
+<sub>If this saved you from building your own tally board, [a coffee](https://www.buymeacoffee.com/adambeltz) is always appreciated, never expected.</sub>

@@ -879,44 +879,61 @@ const MAX_SAVE_ATTEMPTS = 5;
 // save fails because of the network or a save conflict (not an auth
 // failure), queue a fresh attempt for automatic retry instead of
 // discarding the change.
+// Every Settings/Team/Event change (Save Changes, Add, Remove, Factory
+// Reset, switching the active event) funnels through here, and this is a
+// real fetch-then-save round trip to Dropbox — unlike a transaction entry's
+// single write, it can visibly take a moment, longer still if a conflict
+// forces a retry. Without some feedback that was indistinguishable from the
+// UI just being unresponsive, so every caller gets this for free rather
+// than each one managing its own button state.
+function setSavingIndicator(visible) {
+    const el = document.getElementById('saving-indicator');
+    if (el) el.classList.toggle('hidden', !visible);
+}
+
 async function updateDataWrapper(updateFn, options) {
     const allowQueue = !options || options.allowQueue !== false;
-    const result = await runUpdateWithRetry({
-        fetchState: fetchStateInternal,
-        updateFn,
-        saveState,
-        maxAttempts: MAX_SAVE_ATTEMPTS,
-    });
+    setSavingIndicator(true);
+    try {
+        const result = await runUpdateWithRetry({
+            fetchState: fetchStateInternal,
+            updateFn,
+            saveState,
+            maxAttempts: MAX_SAVE_ATTEMPTS,
+        });
 
-    if (result.status === 'success') {
-        applyThemeColor();
-        renderApp();
-        renderManagement();
-    } else if (result.status === 'save-failed') {
-        // handleAuthFailure() (called from saveState()) already alerted
-        // and is reloading the page — nothing else to do here.
-        console.error('Error saving:', result.error);
-    } else if (allowQueue) {
-        console.error('Error saving, queueing for retry:', result.error || result.status);
-        pendingQueue.push(() =>
-            runUpdateWithRetry({
-                fetchState: fetchStateInternal,
-                updateFn,
-                saveState,
-                maxAttempts: MAX_SAVE_ATTEMPTS,
-            }),
-        );
-        renderPendingIndicator();
-    } else if (result.status === 'fetch-failed') {
-        console.error('Error refreshing state during update:', result.error);
-        alert(
-            "Couldn't reach Dropbox to sync the latest data. Your change was not saved — please check your connection and try again.",
-        );
-    } else {
-        alert("Couldn't save your change after several attempts due to a data conflict. Please try again.");
+        if (result.status === 'success') {
+            applyThemeColor();
+            renderApp();
+            renderManagement();
+        } else if (result.status === 'save-failed') {
+            // handleAuthFailure() (called from saveState()) already alerted
+            // and is reloading the page — nothing else to do here.
+            console.error('Error saving:', result.error);
+        } else if (allowQueue) {
+            console.error('Error saving, queueing for retry:', result.error || result.status);
+            pendingQueue.push(() =>
+                runUpdateWithRetry({
+                    fetchState: fetchStateInternal,
+                    updateFn,
+                    saveState,
+                    maxAttempts: MAX_SAVE_ATTEMPTS,
+                }),
+            );
+            renderPendingIndicator();
+        } else if (result.status === 'fetch-failed') {
+            console.error('Error refreshing state during update:', result.error);
+            alert(
+                "Couldn't reach Dropbox to sync the latest data. Your change was not saved — please check your connection and try again.",
+            );
+        } else {
+            alert("Couldn't save your change after several attempts due to a data conflict. Please try again.");
+        }
+
+        return result;
+    } finally {
+        setSavingIndicator(false);
     }
-
-    return result;
 }
 
 function renderPendingIndicator() {

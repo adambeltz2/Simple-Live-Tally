@@ -176,10 +176,18 @@
                 <div class="flex-shrink-0 px-6 pt-6">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-2xl font-bold">Data Management</h2>
-                        <button id="export-zip-btn" class="bg-gray-800 dark:bg-gray-700 hover:opacity-90 text-white font-semibold py-2 px-4 rounded shadow-sm text-sm inline-flex items-center">
-                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                            Export Data (ZIP)
-                        </button>
+                        <div class="flex items-center gap-3">
+                            <!-- Settings/Teams/Events all go through a real
+                                 fetch-then-save round trip to Dropbox (see
+                                 updateDataWrapper() in js/app.js) — this is
+                                 the only feedback that it's actually doing
+                                 something, not just unresponsive. -->
+                            <span id="saving-indicator" class="hidden text-xs text-gray-500 dark:text-gray-400 font-medium">⏳ Saving…</span>
+                            <button id="export-zip-btn" class="bg-gray-800 dark:bg-gray-700 hover:opacity-90 text-white font-semibold py-2 px-4 rounded shadow-sm text-sm inline-flex items-center">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                Export Data (ZIP)
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Sub-navigation: each pane below fills the remaining height on
@@ -285,7 +293,7 @@
 
     <!-- Footer -->
     <footer id="main-footer" class="flex-shrink-0 text-center text-sm text-gray-500 py-4 mt-auto">
-        <p class="font-medium">Simple Live Tally <span class="font-bold">v2.5.1</span></p>
+        <p class="font-medium">Simple Live Tally <span class="font-bold">v2.5.2</span></p>
         <p class="mt-1 space-x-2">
             <a href="https://github.com/adambeltz2/Simple-Live-Tally" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">GitHub</a>
             <span>|</span>
