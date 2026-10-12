@@ -1728,6 +1728,119 @@ test('DOM: viewer link hand-off (second device with no Dropbox login of its own)
         },
     );
 
+    await t.test('generateViewerLink() captures the selected event and carries it across the redirect', async () => {
+        const window = loadApp();
+        window.localStorage.setItem('dropbox_token', 'admin-own-token');
+        window.appData = baseAppData({
+            events: [
+                { id: 'evt1', name: 'First Event', goalAmount: null, startDate: '', endDate: '' },
+                { id: 'evt2', name: 'Second Event', goalAmount: null, startDate: '', endDate: '' },
+            ],
+            activeEventId: 'evt2',
+        });
+        window.switchTab('management');
+        window.document.getElementById('viewer-link-event-select').value = 'evt1';
+
+        await window.generateViewerLink();
+
+        assert.equal(
+            window.localStorage.getItem('viewer_link_pending_event_id'),
+            'evt1',
+            'the event picked in the dropdown should be stored, not whatever is globally active',
+        );
+    });
+
+    await t.test('completing viewer-link generation includes the pinned event in the resulting link', async () => {
+        const window = loadApp('http://localhost/?code=abc123');
+        window.localStorage.setItem('viewer_link_pkce_verifier', 'stub-verifier');
+        window.localStorage.setItem('viewer_link_pending_event_id', 'evt1');
+        window.localStorage.setItem('dropbox_token', 'admin-own-token');
+        window.fetch = async (url) => {
+            if (String(url).includes('oauth2/token')) {
+                return { ok: true, json: async () => ({ access_token: 'viewer-tok', refresh_token: 'viewer-rtok' }) };
+            }
+            throw new Error('unexpected fetch URL: ' + url);
+        };
+
+        await window.completeViewerLinkGeneration('abc123', 'stub-verifier');
+
+        assert.equal(
+            window.localStorage.getItem('viewer_link_pending_event_id'),
+            null,
+            'the one-time pending event id should be consumed, same as the PKCE verifier',
+        );
+        const link = window.document.getElementById('viewer-link-output').value;
+        assert.match(link, /[?&]ev=evt1(&|$)/);
+    });
+
+    await t.test(
+        'importing a viewer link with a pinned event stores it locally, separate from the shared active event',
+        () => {
+            const window = loadApp('http://localhost/#tv-viewer?at=tok123&rt=rtok123&ev=evt1');
+
+            assert.equal(window.localStorage.getItem('viewer_pinned_event_id'), 'evt1');
+            assert.equal(
+                window.location.hash,
+                '#tv-viewer',
+                'the ev param should be scrubbed from the visible URL along with the tokens',
+            );
+        },
+    );
+
+    await t.test('importing a viewer link with no pinned event leaves no pin behind', () => {
+        const window = loadApp('http://localhost/#tv-viewer?at=tok123&rt=rtok123');
+
+        assert.equal(window.localStorage.getItem('viewer_pinned_event_id'), null);
+    });
+
+    await t.test(
+        'a pinned event overrides whatever event is active elsewhere — the actual bug this fixes',
+        async () => {
+            const window = loadApp();
+            window.localStorage.setItem('viewer_pinned_event_id', 'evt1');
+            window.appData = baseAppData({
+                entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+                events: [
+                    { id: 'evt1', name: 'First Event', goalAmount: null, startDate: '', endDate: '' },
+                    { id: 'evt2', name: 'Second Event', goalAmount: null, startDate: '', endDate: '' },
+                ],
+                // An admin or keyer elsewhere switched the shared, account-wide
+                // active event to evt2 — a plain device (no pin) would follow
+                // that switch; this viewer link must not.
+                activeEventId: 'evt2',
+            });
+            window.transactionEntries = [
+                baseEntry({ id: 't1', logicalId: 't1', eventId: 'evt1', entityId: 'e1', amount: 111 }),
+                baseEntry({ id: 't2', logicalId: 't2', eventId: 'evt2', entityId: 'e1', amount: 999 }),
+            ];
+            window.accessToken = 'tok123';
+
+            window.renderApp();
+
+            assert.equal(window.document.getElementById('leaderboard-subtitle').innerText, 'First Event');
+            assert.match(window.document.getElementById('leaderboard').textContent, /\$111\.00/);
+            assert.doesNotMatch(window.document.getElementById('leaderboard').textContent, /\$999\.00/);
+
+            // The actual network fetch must also pull evt1's ledger, not
+            // evt2's — otherwise the right total only shows by accident
+            // from already-loaded transactionEntries, and a real poll would
+            // still fetch (and switch to) the wrong event's data.
+            let fetchedPath = null;
+            window.fetch = async (url, opts) => {
+                const arg = JSON.parse(opts.headers['Dropbox-API-Arg']);
+                fetchedPath = arg.path;
+                return { ok: true, status: 200, blob: async () => Buffer.from('') };
+            };
+            try {
+                await window.fetchTransactionEntriesInternal();
+            } catch {
+                // JSZip will fail on the empty stub blob — irrelevant here,
+                // only the requested path matters for this assertion.
+            }
+            assert.equal(fetchedPath, '/transactions/evt1', 'should poll the pinned event, not the active one');
+        },
+    );
+
     await t.test('renderViewerLinkQr() encodes the actual URL, not a fixed placeholder', () => {
         const window = loadApp();
 
@@ -1738,6 +1851,32 @@ test('DOM: viewer link hand-off (second device with no Dropbox login of its own)
         const longLinkSvg = window.document.getElementById('viewer-link-qr').innerHTML;
 
         assert.notEqual(shortLinkSvg, longLinkSvg, 'a longer/different URL must encode to different module data');
+    });
+
+    await t.test('renderViewerLinkQr() sizes the container off the real module count, not a fixed box', () => {
+        // A real Dropbox access token (the "sl.u...." short-lived format) plus
+        // a refresh token push the URL to 250-300+ chars — this is what
+        // actually shipped as unscannable noise in a fixed 176px box; a
+        // short test string never exposed it. See QR_PX_PER_MODULE above.
+        const window = loadApp();
+        const container = window.document.getElementById('viewer-link-qr');
+
+        window.renderViewerLinkQr('https://example.com/#tv-viewer?at=AAAA&rt=AAAA');
+        const shortSize = parseInt(container.style.width, 10);
+
+        const realisticAccessToken = 'sl.u.' + 'A'.repeat(170);
+        const realisticRefreshToken = 'B'.repeat(70);
+        window.renderViewerLinkQr(
+            `https://adambeltz2.github.io/Simple-Live-Tally/#tv-viewer?at=${realisticAccessToken}&rt=${realisticRefreshToken}`,
+        );
+        const realisticSize = parseInt(container.style.width, 10);
+
+        assert.ok(shortSize >= 176, 'a short payload should still get a comfortably-sized box');
+        assert.ok(
+            realisticSize > shortSize,
+            `a realistic-length token pair (${realisticSize}px) must size up from the short case (${shortSize}px), not stay fixed`,
+        );
+        assert.equal(container.style.height, container.style.width, 'the box must stay square');
     });
 
     await t.test(

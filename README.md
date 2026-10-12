@@ -62,9 +62,11 @@ The operator's laptop (running "Add Transaction") and the screen the audience wa
 
 ### Option 1 — Viewer Link (recommended; the second device never logs into Dropbox)
 
-1. On your own admin device, go to **Data Management > Settings > Second Device** and click **Generate Viewer Link**.
+1. On your own admin device, go to **Data Management > Settings > Second Device**, pick which **Event** this link is for, and click **Generate Viewer Link**.
 2. You'll be sent through Dropbox's own sign-in once — this grants a read-only connection (`account_info.read`, `files.metadata.read`, `files.content.read`), same as the connection Option 2 below sets up, just obtained from your own device instead. Your own admin session is untouched throughout.
 3. You'll land back on a **Viewer link ready** screen with a QR code, a link, and a **Copy** button. On the second device, either scan the code or open the link (paste it in, AirDrop it, text it — however's convenient), and it connects immediately, read-only, with **no Dropbox login screen on that device at all**.
+
+The event you picked in step 1 sticks to that device — it keeps showing that event even if you (or a `#keyer` station) switch the active event elsewhere, which matters if you're ever running two events at once and don't want every open TV flipping to whatever's active account-wide.
 
 **Keep that link private.** It carries the read-only connection itself — anyone who has it can view the event's live totals until you generate a new one (generating a new link doesn't revoke the old one; if you need to be sure an old link stops working, revoke Simple Live Tally's access from your [Dropbox account's connected-apps settings](https://www.dropbox.com/account/connected_apps) and generate a fresh one).
 

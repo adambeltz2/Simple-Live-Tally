@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.1] - 2026-10-12
+### Fixed
+- **The Viewer Link QR code was unreadable noise for a real Dropbox token pair.** It was verified against short placeholder tokens during development; Dropbox's actual short-lived access tokens run 150-200+ characters each, needing a 60-80+ module QR grid that was being crammed into a fixed 176px box — well below the ~4px-per-module floor a camera needs to resolve it. The container now sizes itself off the real module count (clamped between 176px and 360px), and the error-correction level dropped from M to L (this code is scanned once off a screen, not printed and exposed to wear, so the extra redundancy was just adding density for no benefit).
+- **A Viewer Link now pins to the event it was generated for**, instead of following whatever event happens to be active account-wide. Previously there was exactly one shared `activeEventId` for the whole account, read by Admin, Keyer, and every open Viewer Link alike — switching events on *any* device (including a `#keyer` station) flipped what every TV showing a Viewer Link displayed, even ones meant to stay on a different event. Settings > Second Device now has an event picker next to **Generate Viewer Link**; the chosen event travels in the link itself and is stored locally on that device (`getDisplayEventId()`, `js/app.js`), independent of the shared setting, falling back to it only if the pinned event is later removed.
+
 ## [2.5.0] - 2026-10-07
 ### Added
 - **The generated Viewer Link now also renders as a scannable QR code**, alongside the existing copyable URL — point the second device's camera at it instead of copy/pasting or AirDropping a long URL with embedded tokens. Uses a small vendored QR library (`js/vendor/qrcode.js`, MIT-licensed, no CSP changes needed — see `js/vendor/README.md`) rather than a CDN, so it keeps working even on a venue network that can't reach one. Added `renderViewerLinkQr()` (`js/app.js`).

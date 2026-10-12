@@ -378,7 +378,7 @@ test('buildViewerLinkUrl / parseViewerLinkImport', async (t) => {
 
         const hash = url.slice(url.indexOf('#'));
         const parsed = parseViewerLinkImport(hash);
-        assert.deepEqual(parsed, { accessToken: 'access123', refreshToken: 'refresh456' });
+        assert.deepEqual(parsed, { accessToken: 'access123', refreshToken: 'refresh456', eventId: null });
     });
 
     await t.test('round-trips an access token with no refresh token', () => {
@@ -386,7 +386,20 @@ test('buildViewerLinkUrl / parseViewerLinkImport', async (t) => {
         assert.equal(url, 'https://example.com/app/#tv-viewer?at=access123');
 
         const parsed = parseViewerLinkImport(url.slice(url.indexOf('#')));
-        assert.deepEqual(parsed, { accessToken: 'access123', refreshToken: null });
+        assert.deepEqual(parsed, { accessToken: 'access123', refreshToken: null, eventId: null });
+    });
+
+    await t.test('round-trips a pinned eventId alongside the tokens', () => {
+        const url = buildViewerLinkUrl('https://example.com/app/', 'access123', 'refresh456', 'evt_42');
+        assert.equal(url, 'https://example.com/app/#tv-viewer?at=access123&rt=refresh456&ev=evt_42');
+
+        const parsed = parseViewerLinkImport(url.slice(url.indexOf('#')));
+        assert.deepEqual(parsed, { accessToken: 'access123', refreshToken: 'refresh456', eventId: 'evt_42' });
+    });
+
+    await t.test('omits the ev param, and parses back a null eventId, when no event is pinned', () => {
+        const url = buildViewerLinkUrl('https://example.com/app/', 'access123', 'refresh456', null);
+        assert.doesNotMatch(url, /ev=/);
     });
 
     await t.test('parseViewerLinkImport returns null for a plain #tv-viewer sign-in hash', () => {

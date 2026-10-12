@@ -187,25 +187,32 @@
     // to the other device instead. The tokens travel in the hash, never the
     // query string or path, so they're never sent to any server — this is a
     // static site, but that property matters if it's ever hosted behind
-    // something that logs requests. See generateViewerLink()/
-    // importViewerTokenFromUrl() in js/app.js for where these are used.
-    function buildViewerLinkUrl(baseUrl, accessToken, refreshToken) {
+    // something that logs requests. eventId, when given, pins the second
+    // device to that specific event — see getDisplayEventId() in js/app.js
+    // — rather than it following whatever event happens to be active
+    // account-wide (which an admin or keyer elsewhere can change at any
+    // time; without a pin, every open viewer link would flip with it). See
+    // generateViewerLink()/importViewerTokenFromUrl() in js/app.js for
+    // where these are used.
+    function buildViewerLinkUrl(baseUrl, accessToken, refreshToken, eventId) {
         const params = new URLSearchParams();
         params.set('at', accessToken);
         if (refreshToken) params.set('rt', refreshToken);
+        if (eventId) params.set('ev', eventId);
         return `${baseUrl}${VIEWER_HASH}?${params.toString()}`;
     }
 
     // The inverse of buildViewerLinkUrl(): pulls the access/refresh token
-    // pair back out of a URL hash that carries one, or returns null if this
-    // hash isn't a viewer-link import at all (a plain "#tv-viewer" from a
-    // normal sign-in, some other hash, or nothing).
+    // pair (and pinned eventId, if any) back out of a URL hash that carries
+    // one, or returns null if this hash isn't a viewer-link import at all (a
+    // plain "#tv-viewer" from a normal sign-in, some other hash, or
+    // nothing).
     function parseViewerLinkImport(hash) {
         if (!hash || !hash.startsWith(VIEWER_HASH + '?')) return null;
         const params = new URLSearchParams(hash.slice(VIEWER_HASH.length + 1));
         const accessToken = params.get('at');
         if (!accessToken) return null;
-        return { accessToken, refreshToken: params.get('rt') || null };
+        return { accessToken, refreshToken: params.get('rt') || null, eventId: params.get('ev') || null };
     }
 
     // URL hash for a "keyer" device — a station where a volunteer only adds

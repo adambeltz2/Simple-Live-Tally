@@ -155,6 +155,10 @@ function importViewerTokenFromUrl() {
     if (!imported) return;
     window.localStorage.setItem('dropbox_token', imported.accessToken);
     if (imported.refreshToken) window.localStorage.setItem('dropbox_refresh_token', imported.refreshToken);
+    // Stored locally on *this* device, separately from the shared appData —
+    // see getDisplayEventId() — so this screen keeps showing the event it
+    // was generated for even if the active event changes elsewhere.
+    if (imported.eventId) window.localStorage.setItem('viewer_pinned_event_id', imported.eventId);
     window.history.replaceState(null, '', window.location.pathname + window.location.search + VIEWER_HASH);
 }
 importViewerTokenFromUrl();
@@ -179,12 +183,28 @@ function toggleDarkMode() {
 initTheme();
 
 // --- VIEW MODE MANAGEMENT ---
-// The active event, or undefined if none is set/found — a single lookup
-// used everywhere branding (resolveThemeColor/resolveLogoUrl) or other
-// per-event rendering needs "the event currently on screen."
+// The event id this device should actually display — appData.activeEventId
+// everywhere except a #tv-viewer device that imported a Viewer Link pinned
+// to a specific event (see generateViewerLink()/importViewerTokenFromUrl()
+// below). Without a pin, every open viewer link follows the one shared,
+// account-wide activeEventId, so an admin or keyer switching events
+// anywhere else flips every TV showing one too — pinning decouples "what
+// this screen shows" from "what's active elsewhere." Falls back to
+// activeEventId if the pinned event no longer exists (e.g. it was removed
+// from the dashboard since the link was generated).
+function getDisplayEventId() {
+    if (!appData) return undefined;
+    const pinned = window.localStorage.getItem('viewer_pinned_event_id');
+    if (pinned && appData.events.some((e) => e.id === pinned)) return pinned;
+    return appData.activeEventId;
+}
+
+// The active (or pinned) event, or undefined if none is set/found — a
+// single lookup used everywhere branding (resolveThemeColor/resolveLogoUrl)
+// or other per-event rendering needs "the event currently on screen."
 function getActiveEvent() {
     if (!appData) return undefined;
-    return appData.events.find((e) => e.id === appData.activeEventId);
+    return appData.events.find((e) => e.id === getDisplayEventId());
 }
 
 function applyThemeColor() {
@@ -406,6 +426,12 @@ async function handleAuthRedirect() {
 async function generateViewerLink() {
     const codeVerifier = generateRandomString(64);
     window.localStorage.setItem('viewer_link_pkce_verifier', codeVerifier);
+    // Which event this link should pin the second device to (see
+    // getDisplayEventId() above) — captured now, before navigating away to
+    // Dropbox, and carried across that redirect the same way the PKCE
+    // verifier is, since the OAuth round-trip reloads the page.
+    const eventId = document.getElementById('viewer-link-event-select').value;
+    if (eventId) window.localStorage.setItem('viewer_link_pending_event_id', eventId);
     const codeChallenge = await generateCodeChallenge(codeVerifier);
     window.location.href = storageProvider.getAuthUrl({
         clientId: CLIENT_ID,
@@ -423,6 +449,8 @@ async function generateViewerLink() {
 // would otherwise just fall straight into their own dashboard.
 async function completeViewerLinkGeneration(code, codeVerifier) {
     window.localStorage.removeItem('viewer_link_pkce_verifier');
+    const eventId = window.localStorage.getItem('viewer_link_pending_event_id');
+    window.localStorage.removeItem('viewer_link_pending_event_id');
     window.history.replaceState({}, document.title, window.location.pathname);
     const result = await storageProvider.exchangeCodeForToken({
         clientId: CLIENT_ID,
@@ -431,12 +459,23 @@ async function completeViewerLinkGeneration(code, codeVerifier) {
         codeVerifier,
     });
     if (result) {
-        showGeneratedViewerLink(result.accessToken, result.refreshToken);
+        showGeneratedViewerLink(result.accessToken, result.refreshToken, eventId);
     } else {
         alert('Could not generate the viewer link. Please try again from Settings.');
         window.location.reload();
     }
 }
+
+// Each QR module needs to render at roughly this many CSS px for a phone
+// camera to resolve it reliably — below that it degrades into visual noise
+// rather than a scannable code (confirmed the hard way: a real Dropbox
+// token pair runs 150-200+ chars each, needing a 60-80+ module grid, which
+// turned unreadable crammed into a small fixed box). Clamped so the
+// container stays sane regardless of how long the embedded token pair
+// happens to be, from a short local test string up to a worst-case length.
+const QR_PX_PER_MODULE = 6;
+const QR_CONTAINER_MIN_PX = 176;
+const QR_CONTAINER_MAX_PX = 360;
 
 // Renders `url` as a scannable QR code into #viewer-link-qr, so connecting
 // the second device can be "point its camera at this" instead of typing or
@@ -447,9 +486,16 @@ async function completeViewerLinkGeneration(code, codeVerifier) {
 // is the one piece of UI that deliberately ignores applyThemeColor().
 function renderViewerLinkQr(url) {
     const container = document.getElementById('viewer-link-qr');
-    const qr = qrcode(0, 'M');
+    // 'L' (7% recovery) rather than 'M' (15%): this code is scanned once,
+    // right off a screen, not printed and exposed to wear, so the extra
+    // redundancy of 'M' just adds modules for no real benefit — and every
+    // module here is precious (see QR_PX_PER_MODULE above).
+    const qr = qrcode(0, 'L');
     qr.addData(url);
     qr.make();
+    const size = Math.min(QR_CONTAINER_MAX_PX, Math.max(QR_CONTAINER_MIN_PX, qr.getModuleCount() * QR_PX_PER_MODULE));
+    container.style.width = `${size}px`;
+    container.style.height = `${size}px`;
     container.innerHTML = qr.createSvgTag({
         cellSize: 4,
         margin: 4,
@@ -459,9 +505,9 @@ function renderViewerLinkQr(url) {
     });
 }
 
-function showGeneratedViewerLink(accessToken, refreshToken) {
+function showGeneratedViewerLink(accessToken, refreshToken, eventId) {
     const baseUrl = window.location.origin + window.location.pathname;
-    const url = buildViewerLinkUrl(baseUrl, accessToken, refreshToken);
+    const url = buildViewerLinkUrl(baseUrl, accessToken, refreshToken, eventId);
     document.getElementById('viewer-link-output').value = url;
     renderViewerLinkQr(url);
     document.getElementById('login-section').classList.replace('block', 'hidden');
@@ -648,7 +694,7 @@ async function downloadTransactionEntries(eventId) {
 }
 
 async function fetchTransactionEntriesInternal() {
-    transactionEntries = await downloadTransactionEntries(appData.activeEventId);
+    transactionEntries = await downloadTransactionEntries(getDisplayEventId());
     // Anything this device wrote that's now reflected in the fresh poll no
     // longer needs to be merged in separately.
     const confirmedIds = new Set(transactionEntries.map((e) => e.id));
@@ -1281,7 +1327,7 @@ function deleteTransaction(id) {
 // --- RENDER LOGIC ---
 function runCountdown() {
     if (!appData || !appData.activeEventId) return;
-    const activeEvent = appData.events.find((e) => e.id === appData.activeEventId);
+    const activeEvent = getActiveEvent();
     const cd = document.getElementById('event-countdown');
 
     if (activeEvent && activeEvent.endDate) {
@@ -1308,6 +1354,23 @@ function renderManagement() {
     document.getElementById('set-title').value = appData.settings.title || 'Simple Live Tally';
     document.getElementById('set-logo').value = appData.settings.logoUrl || '';
     document.getElementById('set-color').value = appData.settings.themeColor || 'bg-blue-600';
+
+    // Which event "Generate Viewer Link" will pin the next link to — rebuilt
+    // on every render like the dropdown below, but preserves whatever the
+    // admin already picked (rather than silently resetting to the active
+    // event) so a periodic poll mid-pick doesn't undo their choice.
+    const viewerLinkEventSelect = document.getElementById('viewer-link-event-select');
+    const previousViewerLinkSelection = viewerLinkEventSelect.value;
+    viewerLinkEventSelect.innerHTML = '';
+    appData.events.forEach((ev) => {
+        const opt = document.createElement('option');
+        opt.value = ev.id;
+        opt.text = ev.name;
+        viewerLinkEventSelect.appendChild(opt);
+    });
+    viewerLinkEventSelect.value = appData.events.some((ev) => ev.id === previousViewerLinkSelection)
+        ? previousViewerLinkSelection
+        : appData.activeEventId;
 
     const evList = document.getElementById('events-list');
     evList.innerHTML = '';
@@ -1455,15 +1518,20 @@ function renderApp() {
 
     const eventSelect = document.getElementById('active-event-select');
     eventSelect.innerHTML = '';
+    // Two different notions of "the event" here: the dropdown always
+    // reflects the real, shared activeEventId (it's how Admin/Keyer change
+    // it), but what's actually rendered below (subtitle, totals, goal) uses
+    // displayEventId — on a plain device they're the same event; on a
+    // Viewer Link pinned to a specific event they can diverge, and the
+    // pinned one wins for what's shown. See getDisplayEventId() above.
+    const displayEventId = getDisplayEventId();
     let activeEvent = null;
     appData.events.forEach((evt) => {
         const opt = document.createElement('option');
         opt.value = evt.id;
         opt.text = evt.name;
-        if (evt.id === appData.activeEventId) {
-            opt.selected = true;
-            activeEvent = evt;
-        }
+        if (evt.id === appData.activeEventId) opt.selected = true;
+        if (evt.id === displayEventId) activeEvent = evt;
         eventSelect.appendChild(opt);
     });
     document.getElementById('leaderboard-subtitle').innerText = activeEvent ? activeEvent.name : '';
@@ -1485,7 +1553,7 @@ function renderApp() {
     generalFundOpt.value = GENERAL_FUND_LABEL;
     entityDatalist.appendChild(generalFundOpt);
 
-    const totals = computeTotals(appData.entities, getVisibleTransactionEntries(), appData.activeEventId);
+    const totals = computeTotals(appData.entities, getVisibleTransactionEntries(), displayEventId);
     const sortedEntities = sortEntitiesByTotal(appData.entities, totals);
 
     // --- Render Scrolling Top Ticker (Top 25 Leaders) ---
@@ -1523,7 +1591,7 @@ function renderApp() {
     // alike), not just Object.values(totals) — a General Fund donation
     // must still count toward the overall total/goal even though it's
     // excluded from computeTotals()'s per-entity (ranking) totals.
-    const totalRaised = computeEventTotal(getVisibleTransactionEntries(), appData.activeEventId);
+    const totalRaised = computeEventTotal(getVisibleTransactionEntries(), displayEventId);
 
     if (activeEvent) {
         const textSize = isTvMode ? 'text-2xl' : 'text-base';
