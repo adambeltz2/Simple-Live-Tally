@@ -2,22 +2,6 @@
    rather than an inline <style> block so the CSP style-src directive in
    index.html can stay 'self' only, with no 'unsafe-inline'. */
 
-@keyframes marquee {
-    0% {
-        transform: translateX(0%);
-    }
-    100% {
-        transform: translateX(-50%);
-    }
-}
-.animate-marquee {
-    display: flex;
-    width: max-content;
-    animation: marquee 25s linear infinite;
-}
-.animate-marquee:hover {
-    animation-play-state: paused;
-}
 /* Custom Scrollbar for inner lists */
 ::-webkit-scrollbar {
     width: 8px;

@@ -1525,7 +1525,6 @@ function renderApp() {
         document.getElementById('leaderboard').innerHTML =
             '<div class="text-center text-gray-500 mt-10 italic">Leaderboard is empty.</div>';
         document.getElementById('goal-gauge-container').innerHTML = '';
-        document.getElementById('ticker-wrapper').classList.add('hidden');
         return;
     } else {
         // Guarded by isSubmittingTransaction (not submitBtn.disabled) so this
@@ -1580,35 +1579,6 @@ function renderApp() {
     const totals = computeTotals(appData.entities, getVisibleTransactionEntries(), displayEventId);
     const sortedEntities = sortEntitiesByTotal(appData.entities, totals);
 
-    // --- Render Scrolling Top Ticker (Top 25 Leaders) ---
-    const tickerWrapper = document.getElementById('ticker-wrapper');
-    const tickerContent = document.getElementById('ticker-content');
-    const topNCount = 25;
-    const topLeaders = sortedEntities.slice(0, topNCount);
-
-    if (topLeaders.length > 0) {
-        let tickerHtml = '';
-        for (let i = 0; i < 2; i++) {
-            topLeaders.forEach((ent, idx) => {
-                const rank = idx + 1;
-                const amt = totals[ent.id];
-                const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
-                tickerHtml += `<div class="flex items-center gap-2 px-4"><span class="text-yellow-400 font-bold">${medal}</span> <span>${escapeHtml(ent.namePublic)}:</span> <span class="text-green-400 font-bold">$${amt.toFixed(2)}</span></div>`;
-            });
-        }
-        tickerContent.innerHTML = tickerHtml;
-        // The CSS animation scrolls exactly one copy of the (duplicated)
-        // content per cycle, so its duration has to scale with the leader
-        // count or a full board of 25 would fly by at 5x the speed a 5-item
-        // board did. 5s/entry matches the original fixed 25s-for-5-entries
-        // pace. Set via .style (script-driven, not an HTML attribute) since
-        // the CSP's style-src has no 'unsafe-inline' — see applyBarWidths().
-        tickerContent.style.animationDuration = `${topLeaders.length * 5}s`;
-        tickerWrapper.classList.remove('hidden');
-    } else {
-        tickerWrapper.classList.add('hidden');
-    }
-
     // --- Render Goal Gauge ---
     const gaugeContainer = document.getElementById('goal-gauge-container');
     // Uses every transaction for the event (team-tied and General Fund
@@ -1658,7 +1628,7 @@ function renderApp() {
                         Raised <span class="font-bold ${valColor}">$${formattedTotal}</span> of $${goalAmount.toLocaleString()}
                     </div>
                     <div class="flex-1 min-w-[80px] ${trackHeight} rounded-full ${trackColor} overflow-hidden">
-                        <div class="h-full rounded-full ${fillColor} transition-all duration-1000 ease-out" data-bar-pct="${percentage}"></div>
+                        <div class="h-full rounded-full ${fillColor} transition-all duration-1000 ease-out" data-bar-pct="${Math.min(percentage, 100)}"></div>
                     </div>
                     <div class="${fillColor} text-white font-bold ${chipTextSize} ${chipPadding} rounded-full flex-shrink-0 whitespace-nowrap">${Math.round(percentage)}%</div>
                 </div>

@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2026-10-13
+### Changed
+- **Raising past the goal now shows the real percentage** (e.g. 125%) in the goal gauge's chip instead of silently capping the number at 100%. The bar's fill still stops at the edge of its track — there's nowhere further for it to visually go — but the chip no longer hides how far over goal the total actually is. `computeGaugeGeometry()` (`js/logic.js`) now returns the raw, uncapped percentage; only the bar's own width clamps at 100.
+- **Removed the scrolling top leaders ticker** from the dashboard/TV header. The tiered leaderboard below it already surfaces the same top leaders at a glance, so the marquee was redundant and competed for attention with the header.
+
 ## [2.6.0] - 2026-10-13
 ### Changed
 - **The TV screen's goal gauge is now a single inline bar** — a "Raised $X of $Y" label, a progress track, and a solid percentage chip all on one row — replacing the old two-line layout (a text line stacked over a separate full-width bar). Reads as a real progress indicator at a glance instead of two disconnected pieces of text.

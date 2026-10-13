@@ -276,9 +276,9 @@ test('computeGaugeGeometry', async (t) => {
         assert.ok(Math.abs(dashOffset - dashArray / 2) < 0.001);
     });
 
-    await t.test('clamps over-goal raises at 100%', () => {
+    await t.test('returns the raw over-goal percentage uncapped, while the dash offset clamps at 100%', () => {
         const { percentage, dashOffset } = computeGaugeGeometry(500, 100, dashArray);
-        assert.equal(percentage, 100);
+        assert.equal(percentage, 500);
         assert.equal(dashOffset, 0);
     });
 

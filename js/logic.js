@@ -127,8 +127,11 @@
         if (!goalAmount || goalAmount <= 0) {
             return { percentage: 0, dashOffset: arrayLength };
         }
-        const percentage = Math.min((totalRaised / goalAmount) * 100, 100);
-        const dashOffset = arrayLength - (arrayLength * percentage) / 100;
+        // percentage is returned uncapped (can exceed 100 once a goal is
+        // blown past) so callers can display the real number; dashOffset
+        // clamps at 100% since the arc itself has nowhere further to draw.
+        const percentage = (totalRaised / goalAmount) * 100;
+        const dashOffset = arrayLength - (arrayLength * Math.min(percentage, 100)) / 100;
         return { percentage, dashOffset };
     }
 

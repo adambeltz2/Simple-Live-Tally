@@ -286,6 +286,24 @@ test('DOM: dashboard rendering', async (t) => {
         assert.match(gaugeHtml, /bg-red-500 text-white font-bold[^"]*rounded-full[^>]*>25%/);
     });
 
+    await t.test('raising past the goal shows the real percentage in the chip but caps the bar fill at 100%', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            settings: { title: 'Test', logoUrl: '', themeColor: 'bg-blue-600' },
+            events: [{ id: 'evt1', name: 'Main', goalAmount: 200, startDate: '', endDate: '' }],
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-blue-500' }],
+        });
+        window.transactionEntries = [
+            baseEntry({ id: 't1', logicalId: 't1', entityId: 'e1', eventId: 'evt1', amount: 210 }),
+        ];
+
+        window.renderApp();
+
+        const gaugeHtml = window.document.getElementById('goal-gauge-container').innerHTML;
+        assert.match(gaugeHtml, /105%/, 'the chip shows the raw, uncapped percentage');
+        assert.match(gaugeHtml, /data-bar-pct="100"/, 'the bar fill itself never exceeds the track width');
+    });
+
     await t.test('a General Fund donation counts toward the goal total but not any team leaderboard row', () => {
         const window = loadApp();
         window.appData = baseAppData({
@@ -565,45 +583,6 @@ test('DOM: dashboard rendering', async (t) => {
         assert.equal(grid.children.length, 7, 'second page holds the remaining 25 - 18 = 7 teams');
         assert.match(board.textContent, /Team 29\b/, 'the last team is reachable on the second page');
         assert.doesNotMatch(board.textContent, /Team 5\b/, 'the first page is no longer shown');
-    });
-
-    await t.test('the scrolling top ticker shows up to the top 25 leaders before looping', () => {
-        const window = loadApp();
-        const { entities, entries } = makeRoster(30);
-        window.appData = baseAppData({ entities });
-        window.transactionEntries = entries;
-
-        window.renderApp();
-
-        const tickerContent = window.document.getElementById('ticker-content');
-        assert.match(
-            tickerContent.textContent,
-            /Team 24\b/,
-            'rank 25 (Team 24, 0-indexed) should still be on the ticker',
-        );
-        assert.doesNotMatch(tickerContent.textContent, /Team 25\b/, 'rank 26 is past the top 25 and should not appear');
-        // The content is duplicated once (for the seamless loop), so each
-        // shown name appears exactly twice.
-        assert.equal(tickerContent.textContent.match(/Team 0\b/g).length, 2);
-    });
-
-    await t.test('the ticker scroll duration scales with the leader count so pacing stays readable', () => {
-        const window = loadApp();
-        const fiveRoster = makeRoster(5);
-        window.appData = baseAppData({ entities: fiveRoster.entities });
-        window.transactionEntries = fiveRoster.entries;
-        window.renderApp();
-        assert.equal(window.document.getElementById('ticker-content').style.animationDuration, '25s');
-
-        const thirtyRoster = makeRoster(30);
-        window.appData = baseAppData({ entities: thirtyRoster.entities });
-        window.transactionEntries = thirtyRoster.entries;
-        window.renderApp();
-        assert.equal(
-            window.document.getElementById('ticker-content').style.animationDuration,
-            '125s',
-            'capped at the top 25 leaders, so 30 teams paces the same as exactly 25 would',
-        );
     });
 });
 
