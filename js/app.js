@@ -217,6 +217,19 @@ function applyThemeColor() {
     const btn = document.getElementById('login-btn');
     if (btn) btn.className = btn.className.replace(/bg-(blue|red|green|purple|gray)-\d+/, theme);
 
+    // The TV logo badge (top-right corner, TV mode only — see
+    // checkViewMode()) can't be resolved there: that runs once, synchronously,
+    // at the very start of initApp(), before appData has loaded, so
+    // getActiveEvent() always sees nothing at that point and the logo could
+    // never actually appear. This runs every time appData actually has data
+    // (initial load, every poll, after any admin edit) — exactly when a
+    // resolved logo could change, too.
+    const isTvMode = window.location.hash === '#tv' || isViewerHash(window.location.hash);
+    const tvLogo = document.getElementById('tv-logo');
+    const tvLogoUrl = isTvMode ? resolveLogoUrl(appData.settings, getActiveEvent()) : '';
+    tvLogo.classList.toggle('hidden', !tvLogoUrl);
+    if (tvLogoUrl) tvLogo.src = tvLogoUrl;
+
     const activeTab = document.getElementById('view-dashboard').classList.contains('hidden')
         ? 'tab-management'
         : 'tab-dashboard';
@@ -309,12 +322,6 @@ function checkViewMode() {
         subtitle.classList.add('text-xl', 'mt-1');
 
         countdownDisplay.classList.replace('text-sm', 'text-2xl');
-
-        const tvLogoUrl = appData && appData.settings ? resolveLogoUrl(appData.settings, getActiveEvent()) : '';
-        if (tvLogoUrl) {
-            tvLogo.src = tvLogoUrl;
-            tvLogo.classList.remove('hidden');
-        }
     } else {
         initTheme();
         tvThemeToggle.classList.add('hidden');
@@ -1635,16 +1642,25 @@ function renderApp() {
                   : resolvedTheme.includes('purple')
                     ? 'bg-purple-500'
                     : 'bg-blue-500';
+            // Inline bar + end chip: a single row (label, bar, % chip) rather
+            // than a label line stacked over a full-width bar — reads as a
+            // real progress indicator at a glance instead of two separate
+            // pieces of text. flex-wrap and the track's min-width keep it
+            // from collapsing on a narrow dashboard window; the bar just
+            // drops to its own line there instead of squashing to nothing.
+            const chipTextSize = isTvMode ? 'text-base' : 'text-xs';
+            const chipPadding = isTvMode ? 'px-4 py-1.5' : 'px-2.5 py-1';
+            const trackHeight = isTvMode ? 'h-2.5' : 'h-1.5';
 
             gaugeContainer.innerHTML = `
-                <div class="w-full">
-                    <div class="${textSize} font-bold ${valColor} mb-1.5">
-                        $${formattedTotal}
-                        <span class="${labelColor}">of $${goalAmount.toLocaleString()} · ${Math.round(percentage)}% to goal</span>
+                <div class="w-full flex flex-wrap items-center gap-3">
+                    <div class="${textSize} font-medium ${labelColor} flex-shrink-0 whitespace-nowrap">
+                        Raised <span class="font-bold ${valColor}">$${formattedTotal}</span> of $${goalAmount.toLocaleString()}
                     </div>
-                    <div class="w-full h-1.5 rounded-full ${trackColor} overflow-hidden">
+                    <div class="flex-1 min-w-[80px] ${trackHeight} rounded-full ${trackColor} overflow-hidden">
                         <div class="h-full rounded-full ${fillColor} transition-all duration-1000 ease-out" data-bar-pct="${percentage}"></div>
                     </div>
+                    <div class="${fillColor} text-white font-bold ${chipTextSize} ${chipPadding} rounded-full flex-shrink-0 whitespace-nowrap">${Math.round(percentage)}%</div>
                 </div>
             `;
             applyBarWidths(gaugeContainer);

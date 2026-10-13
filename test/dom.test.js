@@ -262,6 +262,30 @@ test('DOM: dashboard rendering', async (t) => {
         assert.match(board.innerHTML, /width: 25%/, "a team at 1/4 the leader's total should show a 1/4-width bar");
     });
 
+    await t.test('the goal gauge renders as an inline bar with a percentage chip matching the theme color', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            settings: { title: 'Test', logoUrl: '', themeColor: 'bg-red-600' },
+            events: [{ id: 'evt1', name: 'Main', goalAmount: 200, startDate: '', endDate: '' }],
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-blue-500' }],
+        });
+        window.transactionEntries = [
+            baseEntry({ id: 't1', logicalId: 't1', entityId: 'e1', eventId: 'evt1', amount: 50 }),
+        ];
+
+        window.renderApp();
+
+        const gaugeHtml = window.document.getElementById('goal-gauge-container').innerHTML;
+        assert.match(gaugeHtml, /Raised/);
+        assert.match(gaugeHtml, /\$50\.00/);
+        assert.match(gaugeHtml, /of \$200/);
+        assert.match(gaugeHtml, /25%/, 'the chip should show the rounded percentage');
+        // The chip's own background follows the resolved event/app theme
+        // color (red here), same as the bar fill — not a fixed color
+        // regardless of theme.
+        assert.match(gaugeHtml, /bg-red-500 text-white font-bold[^"]*rounded-full[^>]*>25%/);
+    });
+
     await t.test('a General Fund donation counts toward the goal total but not any team leaderboard row', () => {
         const window = loadApp();
         window.appData = baseAppData({
@@ -307,8 +331,20 @@ test('DOM: dashboard rendering', async (t) => {
         window.renderApp();
 
         const gaugeHtml = window.document.getElementById('goal-gauge-container').innerHTML;
-        assert.match(gaugeHtml, /text-gray-900/, 'light theme must use dark text on the gauge value');
-        assert.doesNotMatch(gaugeHtml, /text-white/, 'light theme must not use white gauge text');
+        // text-white legitimately appears on the %-chip regardless of theme
+        // (it's white-on-solid-color, not the value text) — the regression
+        // this guards against is specifically the raised-amount value
+        // rendering white-on-white, so check that span, not the whole gauge.
+        assert.match(
+            gaugeHtml,
+            /<span class="font-bold text-gray-900">/,
+            'light theme must use dark text on the gauge value',
+        );
+        assert.doesNotMatch(
+            gaugeHtml,
+            /<span class="font-bold text-white">/,
+            'light theme must not use white text for the gauge value itself',
+        );
         assert.match(gaugeHtml, /bg-gray-200/, 'light theme must use the light track color, not the dark one');
     });
 
@@ -684,6 +720,41 @@ test('DOM: per-event branding (logo/theme color)', async (t) => {
         const headerLogo = window.document.getElementById('header-logo');
         assert.equal(headerLogo.src, 'https://example.com/event-logo.png');
         assert.equal(headerLogo.classList.contains('hidden'), false);
+    });
+
+    await t.test("the TV logo badge shows in the screen's top-right corner, TV mode only", () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            settings: { title: 'Test', logoUrl: '', themeColor: 'bg-blue-600' },
+            events: [
+                {
+                    id: 'evt1',
+                    name: 'Cook-Off',
+                    goalAmount: null,
+                    startDate: '',
+                    endDate: '',
+                    logoUrl: 'https://example.com/event-logo.png',
+                },
+            ],
+            activeEventId: 'evt1',
+        });
+
+        // Dashboard (not TV) — the badge exists in the DOM (it's TV-only
+        // markup, always rendered) but checkViewMode() must keep it hidden.
+        window.checkViewMode();
+        const tvLogo = window.document.getElementById('tv-logo');
+        assert.equal(tvLogo.classList.contains('hidden'), true, 'must stay hidden outside TV mode');
+
+        window.location.hash = '#tv';
+        window.checkViewMode();
+
+        assert.equal(tvLogo.src, 'https://example.com/event-logo.png');
+        assert.equal(tvLogo.classList.contains('hidden'), false);
+        assert.match(
+            tvLogo.className,
+            /object-contain/,
+            'an arbitrary-aspect logo must not be cropped to fill the badge',
+        );
     });
 
     await t.test("switching the active event re-applies that event's own branding", async () => {

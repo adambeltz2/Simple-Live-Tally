@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-10-13
+### Changed
+- **The TV screen's goal gauge is now a single inline bar** — a "Raised $X of $Y" label, a progress track, and a solid percentage chip all on one row — replacing the old two-line layout (a text line stacked over a separate full-width bar). Reads as a real progress indicator at a glance instead of two disconnected pieces of text.
+- **The TV screen's event logo moved to a top-right corner badge**, independent of the goal gauge, instead of sitting inline next to the event title.
+
+### Fixed
+- **The TV logo never actually appeared**, even when an event had a `logoUrl` set. `checkViewMode()` — the only place that resolved it — runs once, synchronously, as the very first line of `initApp()`, before `appData` has loaded, so it always resolved to nothing. Logo resolution now lives in `applyThemeColor()` (`js/app.js`), which already runs every time `appData` actually has data (initial load, every poll, and after any admin edit).
+
 ## [2.5.2] - 2026-10-12
 ### Added
 - **A "Saving…" indicator now shows during Settings/Team/Event changes.** Save Changes, Add, Remove, Factory Reset, and switching the active event all go through a real fetch-then-save round trip to Dropbox (unlike a transaction entry's single write), which could take a visible moment with no feedback that anything was happening. Added `setSavingIndicator()` (`js/app.js`), driven centrally from `updateDataWrapper()` so every caller gets it for free.
