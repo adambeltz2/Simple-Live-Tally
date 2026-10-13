@@ -112,10 +112,14 @@
                         </div>
                     </div>
                     <div class="flex flex-wrap gap-4 items-end">
-                        <div class="flex-1 min-w-[200px]">
+                        <div class="flex-1 min-w-[200px] relative">
                             <label class="block text-sm font-medium mb-1 opacity-90">Entity</label>
-                            <input type="text" id="entity-select" list="entity-options" autocomplete="off" placeholder="Type to search teams…" class="w-full p-2.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner bg-white dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none">
-                            <datalist id="entity-options"></datalist>
+                            <input type="text" id="entity-select" autocomplete="off" placeholder="Type to search teams…" class="w-full p-2.5 border border-gray-400 dark:border-gray-600 rounded shadow-inner bg-white dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none">
+                            <!-- Custom suggestion list, not a native <datalist> — WebKit has
+                                 never implemented the <datalist> dropdown UI on iOS/iPadOS
+                                 Safari, so an operator on a phone got no suggestions at all
+                                 (see renderEntitySuggestions() in js/app.js). -->
+                            <div id="entity-suggestions" class="hidden absolute z-20 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white dark:bg-gray-700 border border-gray-400 dark:border-gray-600 rounded shadow-lg"></div>
                         </div>
                         <div class="flex-1 min-w-[150px]">
                             <label class="block text-sm font-medium mb-1 opacity-90">Amount ($)</label>
@@ -291,7 +295,7 @@
 
     <!-- Footer -->
     <footer id="main-footer" class="flex-shrink-0 text-center text-sm text-gray-500 py-4 mt-auto">
-        <p class="font-medium">Simple Live Tally <span class="font-bold">v2.7.0</span></p>
+        <p class="font-medium">Simple Live Tally <span class="font-bold">v2.7.1</span></p>
         <p class="mt-1 space-x-2">
             <a href="https://github.com/adambeltz2/Simple-Live-Tally" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">GitHub</a>
             <span>|</span>

@@ -390,16 +390,92 @@ test('DOM: dashboard rendering', async (t) => {
         );
     });
 
-    await t.test('the entity search datalist offers a General Fund / Donation option alongside every team', () => {
+    await t.test('the entity suggestion list offers a General Fund / Donation option alongside every team', () => {
         const window = loadApp();
         window.appData = baseAppData({
             entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
         });
         window.renderApp();
+        window.renderEntitySuggestions();
 
-        const options = Array.from(window.document.getElementById('entity-options').children).map((o) => o.value);
+        const options = Array.from(window.document.getElementById('entity-suggestions').children).map(
+            (btn) => btn.textContent,
+        );
         assert.deepEqual(options, ['Team A', window.GENERAL_FUND_LABEL]);
     });
+
+    await t.test(
+        'the entity suggestion list is not a native <datalist> — iOS/iPadOS Safari never renders that UI',
+        () => {
+            const window = loadApp();
+            window.appData = baseAppData({
+                entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+            });
+            window.renderApp();
+
+            assert.equal(window.document.getElementById('entity-options'), null, 'the old <datalist> must be gone');
+            assert.equal(
+                window.document.getElementById('entity-select').hasAttribute('list'),
+                false,
+                'the input must not point at a <datalist> that no longer exists',
+            );
+        },
+    );
+
+    await t.test('typing into the entity search filters suggestions by a case-insensitive substring match', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: [
+                { id: 'e1', namePublic: 'Team Alpha', namePrivate: '', imageUrl: '', color: 'bg-red-500' },
+                { id: 'e2', namePublic: 'Team Beta', namePrivate: '', imageUrl: '', color: 'bg-blue-500' },
+            ],
+        });
+        window.renderApp();
+
+        window.document.getElementById('entity-select').value = 'ALPH';
+        window.renderEntitySuggestions();
+
+        const box = window.document.getElementById('entity-suggestions');
+        assert.equal(box.classList.contains('hidden'), false);
+        const options = Array.from(box.children).map((btn) => btn.textContent);
+        assert.deepEqual(options, ['Team Alpha']);
+    });
+
+    await t.test('a match with no suggestions hides the dropdown instead of showing an empty box', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team Alpha', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.renderApp();
+
+        window.document.getElementById('entity-select').value = 'zzz-no-match';
+        window.renderEntitySuggestions();
+
+        const box = window.document.getElementById('entity-suggestions');
+        assert.equal(box.classList.contains('hidden'), true);
+        assert.equal(box.children.length, 0);
+    });
+
+    await t.test(
+        'tapping a suggestion fills the entity field, hides the dropdown, and focuses the amount field',
+        () => {
+            const window = loadApp();
+            window.appData = baseAppData({
+                entities: [{ id: 'e1', namePublic: 'Team Alpha', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+            });
+            window.renderApp();
+            window.renderEntitySuggestions();
+
+            const box = window.document.getElementById('entity-suggestions');
+            box.querySelector('button[data-suggestion-idx="0"]').dispatchEvent(
+                new window.Event('click', { bubbles: true }),
+            );
+
+            assert.equal(window.document.getElementById('entity-select').value, 'Team Alpha');
+            assert.equal(box.classList.contains('hidden'), true);
+            assert.equal(window.document.activeElement.id, 'amount-input');
+        },
+    );
 
     await t.test('an empty roster shows the setup prompt instead of throwing', () => {
         const window = loadApp();

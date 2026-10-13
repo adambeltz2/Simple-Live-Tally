@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.1] - 2026-10-13
+### Fixed
+- **Entity type-ahead now actually works on a phone.** The Entity field's suggestions relied on a native `<datalist>`, whose dropdown UI WebKit has never implemented on iOS/iPadOS Safari — an operator on a phone got no suggestions at all and had to type a team's exact name from memory before Submit Vote would accept it. Replaced with a plain, always-tappable suggestion list rendered and filtered in JS (`renderEntitySuggestions()` in `js/app.js`), which works identically everywhere. Tapping a suggestion fills the field and moves focus straight to Amount for faster one-handed entry.
+
 ## [2.7.0] - 2026-10-13
 ### Changed
 - **Raising past the goal now shows the real percentage** (e.g. 125%) in the goal gauge's chip instead of silently capping the number at 100%. The bar's fill still stops at the edge of its track — there's nowhere further for it to visually go — but the chip no longer hides how far over goal the total actually is. `computeGaugeGeometry()` (`js/logic.js`) now returns the raw, uncapped percentage; only the bar's own width clamps at 100.

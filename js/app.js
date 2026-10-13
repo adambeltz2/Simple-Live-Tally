@@ -1183,6 +1183,52 @@ function ensureDeviceLabel() {
     return label;
 }
 
+// Builds the #entity-select suggestion list (team names + General Fund),
+// filtered by whatever's currently typed, and renders it into
+// #entity-suggestions. Replaces a native <datalist> — WebKit has never
+// implemented the <datalist> dropdown UI on iOS/iPadOS Safari, so an
+// operator on a phone got no suggestions at all and had to type a team's
+// exact name from memory (resolveEntitySelection() in js/logic.js only
+// accepts an exact match). entitySuggestionMatches is kept in module scope
+// so the click handler below can map a tapped row back to its name without
+// re-deriving (and potentially re-ordering) the filtered list.
+let entitySuggestionMatches = [];
+
+function renderEntitySuggestions() {
+    if (!appData || !appData.entities) return;
+    const input = document.getElementById('entity-select');
+    const box = document.getElementById('entity-suggestions');
+    const query = input.value.trim().toLowerCase();
+    const candidates = appData.entities.map((ent) => ent.namePublic).concat([GENERAL_FUND_LABEL]);
+    entitySuggestionMatches = query ? candidates.filter((name) => name.toLowerCase().includes(query)) : candidates;
+
+    if (entitySuggestionMatches.length === 0) {
+        box.classList.add('hidden');
+        box.innerHTML = '';
+        return;
+    }
+
+    box.innerHTML = entitySuggestionMatches
+        .map(
+            (name, idx) =>
+                `<button type="button" data-suggestion-idx="${idx}" class="block w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-600 truncate">${escapeHtml(name)}</button>`,
+        )
+        .join('');
+    box.classList.remove('hidden');
+}
+
+function hideEntitySuggestions() {
+    document.getElementById('entity-suggestions').classList.add('hidden');
+}
+
+function selectEntitySuggestion(idx) {
+    const name = entitySuggestionMatches[idx];
+    if (name === undefined) return;
+    document.getElementById('entity-select').value = name;
+    hideEntitySuggestions();
+    document.getElementById('amount-input').focus();
+}
+
 function submitTransaction() {
     const btn = document.getElementById('submit-btn');
     const msg = document.getElementById('entry-message');
@@ -1559,22 +1605,16 @@ function renderApp() {
     });
     document.getElementById('leaderboard-subtitle').innerText = activeEvent ? activeEvent.name : '';
 
-    // #entity-select is a plain text <input> backed by the #entity-options
-    // <datalist> below (type-to-search — far faster than scrolling a
-    // <select> once there are more than a handful of teams). Its typed
-    // value is never touched here, only the list of suggestions, so an
-    // operator's in-progress search survives a re-render (e.g. the 60s
-    // poll) instead of being reset like the old <select>'s selection was.
-    const entityDatalist = document.getElementById('entity-options');
-    entityDatalist.innerHTML = '';
-    appData.entities.forEach((ent) => {
-        const opt = document.createElement('option');
-        opt.value = ent.namePublic;
-        entityDatalist.appendChild(opt);
-    });
-    const generalFundOpt = document.createElement('option');
-    generalFundOpt.value = GENERAL_FUND_LABEL;
-    entityDatalist.appendChild(generalFundOpt);
+    // #entity-select is a plain text <input> backed by the custom
+    // #entity-suggestions dropdown (see renderEntitySuggestions() below) —
+    // type-to-search, far faster than scrolling a <select> once there are
+    // more than a handful of teams. The typed value is never touched here;
+    // only the suggestion list is refreshed, and only while it's already
+    // open, so an operator's in-progress search survives a re-render (e.g.
+    // the 60s poll) instead of being reset or popped open unexpectedly.
+    if (!document.getElementById('entity-suggestions').classList.contains('hidden')) {
+        renderEntitySuggestions();
+    }
 
     const totals = computeTotals(appData.entities, getVisibleTransactionEntries(), displayEventId);
     const sortedEntities = sortEntitiesByTotal(appData.entities, totals);
@@ -1848,6 +1888,22 @@ function bindStaticEventListeners() {
     document.getElementById('tab-management').addEventListener('click', () => switchTab('management'));
     document.getElementById('submit-btn').addEventListener('click', submitTransaction);
     document.getElementById('undo-last-entry-btn').addEventListener('click', undoLastEntry);
+
+    const entitySelectInput = document.getElementById('entity-select');
+    entitySelectInput.addEventListener('input', renderEntitySuggestions);
+    entitySelectInput.addEventListener('focus', renderEntitySuggestions);
+    entitySelectInput.addEventListener('blur', () => {
+        // Delayed rather than immediate: blur fires before a tap/click on a
+        // suggestion button does (on both touch and mouse), so hiding the
+        // dropdown synchronously here would remove the button from the DOM
+        // before that click/tap ever gets delivered.
+        setTimeout(hideEntitySuggestions, 150);
+    });
+    document.getElementById('entity-suggestions').addEventListener('click', (event) => {
+        const btn = event.target.closest('button[data-suggestion-idx]');
+        if (!btn) return;
+        selectEntitySuggestion(parseInt(btn.dataset.suggestionIdx, 10));
+    });
     document.getElementById('active-event-select').addEventListener('change', changeActiveEvent);
     document.getElementById('export-zip-btn').addEventListener('click', exportDataZip);
     document.getElementById('pending-writes-indicator').addEventListener('click', flushPendingWrites);
