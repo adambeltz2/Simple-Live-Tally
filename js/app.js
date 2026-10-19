@@ -1644,6 +1644,12 @@ function renderApp() {
             const goalAmount = parseFloat(activeEvent.goalAmount);
             const { percentage } = computeGaugeGeometry(totalRaised, goalAmount);
             const trackColor = isDark ? 'bg-gray-800' : 'bg-gray-200';
+            // The light-mode track (bg-gray-200) sits on a near-white
+            // background with barely any contrast between them — on a
+            // bright TV/monitor it nearly disappears. Dark mode doesn't
+            // have this problem (bg-gray-800 already reads clearly against
+            // the dark background), so the border is light-mode only.
+            const trackBorder = isDark ? '' : 'border border-gray-300';
             const resolvedTheme = resolveThemeColor(appData.settings, activeEvent);
             const fillColor = resolvedTheme.includes('red')
                 ? 'bg-red-500'
@@ -1667,7 +1673,7 @@ function renderApp() {
                     <div class="${textSize} font-medium ${labelColor} flex-shrink-0 whitespace-nowrap">
                         Raised <span class="font-bold ${valColor}">$${formattedTotal}</span> of $${goalAmount.toLocaleString()}
                     </div>
-                    <div class="flex-1 min-w-[80px] ${trackHeight} rounded-full ${trackColor} overflow-hidden">
+                    <div class="flex-1 min-w-[80px] ${trackHeight} rounded-full ${trackColor} ${trackBorder} overflow-hidden">
                         <div class="h-full rounded-full ${fillColor} transition-all duration-1000 ease-out" data-bar-pct="${Math.min(percentage, 100)}"></div>
                     </div>
                     <div class="${fillColor} text-white font-bold ${chipTextSize} ${chipPadding} rounded-full flex-shrink-0 whitespace-nowrap">${Math.round(percentage)}%</div>

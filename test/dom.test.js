@@ -364,6 +364,29 @@ test('DOM: dashboard rendering', async (t) => {
             'light theme must not use white text for the gauge value itself',
         );
         assert.match(gaugeHtml, /bg-gray-200/, 'light theme must use the light track color, not the dark one');
+        assert.match(
+            gaugeHtml,
+            /bg-gray-200 border border-gray-300/,
+            'the light-mode track needs a visible border — bg-gray-200 alone barely contrasts against a white/near-white background',
+        );
+    });
+
+    await t.test('the goal gauge track has no extra border in dark mode, where it already contrasts fine', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            events: [{ id: 'evt1', name: 'Main', goalAmount: 200, startDate: '', endDate: '' }],
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.transactionEntries = [
+            baseEntry({ id: 't1', logicalId: 't1', entityId: 'e1', eventId: 'evt1', amount: 50 }),
+        ];
+        window.document.documentElement.classList.add('dark');
+
+        window.renderApp();
+
+        const gaugeHtml = window.document.getElementById('goal-gauge-container').innerHTML;
+        assert.match(gaugeHtml, /bg-gray-800/, 'dark theme must use the dark track color');
+        assert.doesNotMatch(gaugeHtml, /border-gray-300/, 'the light-mode-only border must not leak into dark mode');
     });
 
     await t.test('an event with no goal shows just the running total, not a progress bar', () => {

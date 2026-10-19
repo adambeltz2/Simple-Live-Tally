@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.2] - 2026-10-19
+### Fixed
+- **The goal gauge's progress track was nearly invisible in light mode.** `bg-gray-200` barely contrasts against the near-white dashboard/TV background, so the empty part of the bar effectively disappeared — a problem dark mode never had, since `bg-gray-800` already reads clearly against its dark background. The track now gets a `border border-gray-300` outline in light mode only.
+
 ## [2.7.1] - 2026-10-13
 ### Fixed
 - **Entity type-ahead now actually works on a phone.** The Entity field's suggestions relied on a native `<datalist>`, whose dropdown UI WebKit has never implemented on iOS/iPadOS Safari — an operator on a phone got no suggestions at all and had to type a team's exact name from memory before Submit Vote would accept it. Replaced with a plain, always-tappable suggestion list rendered and filtered in JS (`renderEntitySuggestions()` in `js/app.js`), which works identically everywhere. Tapping a suggestion fills the field and moves focus straight to Amount for faster one-handed entry.
