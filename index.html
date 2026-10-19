@@ -248,6 +248,17 @@
                             <button id="add-entity-btn" class="w-full bg-blue-600 text-white font-semibold py-2 rounded text-sm hover:opacity-90">Add Entity</button>
                         </div>
 
+                        <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 shadow-sm mb-4 max-w-xl">
+                            <p class="text-xs font-bold text-gray-500 uppercase mb-2">Quick Add Teams</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                                One team name per line (or comma-separated) — paste a whole roster at once. Each
+                                team gets its own internal ID automatically; names already on the list are
+                                skipped.
+                            </p>
+                            <textarea id="quick-add-entities" rows="5" placeholder="Team Alpha&#10;Team Beta&#10;Team Gamma" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-2 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500 font-mono"></textarea>
+                            <button id="quick-add-entities-btn" class="w-full bg-blue-600 text-white font-semibold py-2 rounded text-sm hover:opacity-90">Add All</button>
+                        </div>
+
                         <div id="entities-list" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4"></div>
                     </div>
 
@@ -295,7 +306,7 @@
 
     <!-- Footer -->
     <footer id="main-footer" class="flex-shrink-0 text-center text-sm text-gray-500 py-4 mt-auto">
-        <p class="font-medium">Simple Live Tally <span class="font-bold">v2.7.2</span></p>
+        <p class="font-medium">Simple Live Tally <span class="font-bold">v2.8.0</span></p>
         <p class="mt-1 space-x-2">
             <a href="https://github.com/adambeltz2/Simple-Live-Tally" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">GitHub</a>
             <span>|</span>

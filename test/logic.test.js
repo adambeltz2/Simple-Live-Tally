@@ -14,6 +14,7 @@ const {
     resolveLogoUrl,
     computeGaugeGeometry,
     isDuplicateName,
+    parseQuickAddNames,
     isValidTransactionAmount,
     isAllowedMediaUrl,
     VIEWER_HASH,
@@ -308,6 +309,34 @@ test('isDuplicateName', async (t) => {
     await t.test('excludeId lets an entity keep its own name while editing', () => {
         assert.equal(isDuplicateName(entities, 'Team Alpha', 'e1'), false);
         assert.equal(isDuplicateName(entities, 'Team Alpha', 'e2'), true);
+    });
+});
+
+test('parseQuickAddNames', async (t) => {
+    await t.test('splits on newlines, trims, and drops blank lines', () => {
+        assert.deepEqual(parseQuickAddNames('Team Alpha\n  Team Beta  \n\nTeam Gamma\n'), [
+            'Team Alpha',
+            'Team Beta',
+            'Team Gamma',
+        ]);
+    });
+
+    await t.test('also splits on commas, for a pasted spreadsheet row', () => {
+        assert.deepEqual(parseQuickAddNames('Team Alpha, Team Beta,Team Gamma'), [
+            'Team Alpha',
+            'Team Beta',
+            'Team Gamma',
+        ]);
+    });
+
+    await t.test('collapses case-insensitive duplicates within the pasted text, keeping the first spelling', () => {
+        assert.deepEqual(parseQuickAddNames('Team Alpha\nteam alpha\nTEAM ALPHA'), ['Team Alpha']);
+    });
+
+    await t.test('empty or whitespace-only input yields an empty list', () => {
+        assert.deepEqual(parseQuickAddNames(''), []);
+        assert.deepEqual(parseQuickAddNames('   \n  \n'), []);
+        assert.deepEqual(parseQuickAddNames(null), []);
     });
 });
 

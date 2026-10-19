@@ -1116,6 +1116,40 @@ function addEntity() {
     document.getElementById('new-ent-img').value = '';
 }
 
+// Bulk-creates teams from a pasted, newline/comma-separated list of names —
+// the setup cost of adding 20+ teams one at a time through addEntity()'s
+// single-name form was the actual ask here, not raw JSON/XML access. Each
+// team still gets the same auto-generated, opaque id a normal Add Entity
+// click would (crypto.randomUUID() rather than addEntity()'s Date.now(),
+// since many entities are pushed in one synchronous loop here and
+// Date.now() only has millisecond resolution — two teams added in the same
+// millisecond would otherwise collide on the same id). Names already on the
+// roster (or repeated in the pasted text itself) are silently skipped
+// rather than rejected, so a partial re-paste of a roster someone's already
+// started doesn't need to be hand-edited down to just the new names first.
+function quickAddEntities() {
+    const textarea = document.getElementById('quick-add-entities');
+    const names = parseQuickAddNames(textarea.value);
+    if (names.length === 0) return alert('Paste at least one team name, one per line (or comma-separated).');
+
+    updateDataWrapper(() => {
+        names.forEach((namePublic) => {
+            if (isDuplicateName(appData.entities, namePublic)) return;
+            appData.entities.push({
+                id: 'ent_' + window.crypto.randomUUID(),
+                namePublic,
+                namePrivate: '',
+                imageUrl: '',
+                color: colors[Math.floor(Math.random() * colors.length)],
+            });
+        });
+    }).then((result) => {
+        if (result.status === 'success') {
+            textarea.value = '';
+        }
+    });
+}
+
 function editEntity(id) {
     const newPub = document.getElementById(`ent-pub-${id}`).value.trim();
     const newPriv = document.getElementById(`ent-priv-${id}`).value;
@@ -1921,6 +1955,7 @@ function bindStaticEventListeners() {
     document.getElementById('save-settings-btn').addEventListener('click', saveSettings);
     document.getElementById('factory-reset-btn').addEventListener('click', factoryReset);
     document.getElementById('add-entity-btn').addEventListener('click', addEntity);
+    document.getElementById('quick-add-entities-btn').addEventListener('click', quickAddEntities);
     document.getElementById('add-event-btn').addEventListener('click', addEvent);
 
     document.getElementById('admin-view-link').addEventListener('click', (event) => {

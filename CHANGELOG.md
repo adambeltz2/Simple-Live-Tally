@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0] - 2026-10-19
+### Added
+- **Quick Add Teams**, on Data Management > Teams. Paste a whole roster — one name per line, or comma-separated — and submit it in a single save instead of registering each team individually through the one-at-a-time form. Each team still gets its own auto-generated internal id, exactly as Add Entity already did; a name already on the roster (or repeated in the pasted text) is silently skipped rather than rejected, so re-pasting a roster someone's already started doesn't need to be hand-trimmed first. Added `parseQuickAddNames()` (`js/logic.js`) and `quickAddEntities()` (`js/app.js`).
+
 ## [2.7.2] - 2026-10-19
 ### Fixed
 - **The goal gauge's progress track was nearly invisible in light mode.** `bg-gray-200` barely contrasts against the near-white dashboard/TV background, so the empty part of the bar effectively disappeared — a problem dark mode never had, since `bg-gray-800` already reads clearly against its dark background. The track now gets a `border border-gray-300` outline in light mode only.

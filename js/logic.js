@@ -145,6 +145,26 @@
         });
     }
 
+    // Parses a Quick Add textarea's raw text into a clean list of team
+    // names — split on newlines or commas (so either a one-per-line paste
+    // or a comma-separated row from a spreadsheet works), trimmed, empty
+    // lines dropped, and self-duplicates within the pasted text collapsed
+    // (case-insensitive, first occurrence wins) before it ever reaches
+    // isDuplicateName()'s check against the existing roster.
+    function parseQuickAddNames(rawText) {
+        const seen = new Set();
+        const names = [];
+        (rawText || '').split(/[\n,]+/).forEach((line) => {
+            const name = line.trim();
+            if (!name) return;
+            const key = name.toLowerCase();
+            if (seen.has(key)) return;
+            seen.add(key);
+            names.push(name);
+        });
+        return names;
+    }
+
     // A transaction amount must be a finite positive number. Corrections to
     // a mis-entered amount go through editTransactionAmount() (or deletion)
     // instead of allowing a negative/zero entry here. Applies to the
@@ -429,6 +449,7 @@
         resolveLogoUrl,
         computeGaugeGeometry,
         isDuplicateName,
+        parseQuickAddNames,
         isValidTransactionAmount,
         isAllowedMediaUrl,
         VIEWER_HASH,

@@ -722,6 +722,76 @@ test('DOM: input validation', async (t) => {
         assert.equal(window.appData.entities.length, 0, 'no entity should be added');
     });
 
+    await t.test('quickAddEntities rejects empty input without attempting to save', () => {
+        const window = loadApp();
+        window.appData = baseAppData();
+        window.fetch = async () => {
+            throw new Error('fetch should not be called for an empty paste');
+        };
+        let alertMessage = '';
+        window.alert = (msg) => {
+            alertMessage = msg;
+        };
+        window.switchTab('management');
+        window.switchMgmtTab('entities');
+
+        window.document.getElementById('quick-add-entities').value = '   \n  \n';
+        window.quickAddEntities();
+
+        assert.match(alertMessage, /at least one team name/);
+        assert.equal(window.appData.entities.length, 0);
+    });
+
+    await t.test('quickAddEntities bulk-creates teams, skipping ones already on the roster', async () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team Alpha', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.accessToken = 'fake-token';
+        window.alert = () => {};
+        window.switchTab('management');
+        window.switchMgmtTab('entities');
+
+        window.fetch = async (url) => {
+            if (String(url).includes('/files/download')) {
+                return {
+                    ok: true,
+                    status: 200,
+                    headers: { get: () => JSON.stringify({ rev: 'rev1' }) },
+                    json: async () => window.appData,
+                };
+            }
+            if (String(url).includes('/files/upload')) {
+                return { ok: true, status: 200, json: async () => ({ rev: 'rev-next' }) };
+            }
+            throw new Error('unexpected fetch URL: ' + url);
+        };
+
+        // "Team Alpha" is already on the roster (case-insensitive) and
+        // repeated within the paste itself — both should collapse to a
+        // single skip, leaving just Beta and Gamma newly created.
+        window.document.getElementById('quick-add-entities').value = 'team alpha\nTeam Beta\nTeam Beta\nTeam Gamma';
+        window.quickAddEntities();
+        await flushAsync();
+
+        const names = window.appData.entities.map((e) => e.namePublic);
+        assert.deepEqual(names, ['Team Alpha', 'Team Beta', 'Team Gamma']);
+
+        const newIds = window.appData.entities.filter((e) => e.namePublic !== 'Team Alpha').map((e) => e.id);
+        assert.equal(newIds.length, 2);
+        assert.ok(
+            newIds.every((id) => id.startsWith('ent_')),
+            'every new team must get its own auto-generated internal id',
+        );
+        assert.equal(new Set(newIds).size, 2, 'the generated ids must be unique, not collided');
+
+        assert.equal(
+            window.document.getElementById('quick-add-entities').value,
+            '',
+            'the textarea should clear after a successful bulk add',
+        );
+    });
+
     await t.test('saveSettings rejects a non-http(s) logo URL and never attempts to save', () => {
         const window = loadApp();
         window.appData = baseAppData();

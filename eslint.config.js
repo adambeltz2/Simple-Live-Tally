@@ -19,6 +19,7 @@ const logicGlobals = {
     resolveLogoUrl: 'readonly',
     computeGaugeGeometry: 'readonly',
     isDuplicateName: 'readonly',
+    parseQuickAddNames: 'readonly',
     isValidTransactionAmount: 'readonly',
     isAllowedMediaUrl: 'readonly',
     VIEWER_HASH: 'readonly',
