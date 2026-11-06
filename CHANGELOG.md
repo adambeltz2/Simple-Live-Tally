@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.1] - 2026-11-06
+### Fixed
+- **A dead Dropbox token used to stay silently "Connected" until some later action failed.** `initApp()` shows the dashboard optimistically as soon as it sees a token in localStorage, before confirming it's still good — a tab left open for weeks (or a token revoked from Dropbox's side) left the header reading "Connected" right up until an admin action (e.g. Generate Viewer Link) hit a real API call and failed with a confusing error. `updateConnectedAccountStatus()` already makes exactly this validity check at startup via `fetchAccountInfo()`, but used to swallow a confirmed-dead token silently. It now calls `handleAuthFailure()` — the same "please sign in again" prompt other API calls already trigger — the moment a dead token is detected, before the operator can click into a dashboard that isn't actually usable. `handleAuthFailure()` also gained a one-shot guard, since more than one startup check can now notice the same dead token concurrently and it previously had no protection against alerting/reloading twice.
+
 ## [2.8.0] - 2026-10-19
 ### Added
 - **Quick Add Teams**, on Data Management > Teams. Paste a whole roster — one name per line, or comma-separated — and submit it in a single save instead of registering each team individually through the one-at-a-time form. Each team still gets its own auto-generated internal id, exactly as Add Entity already did; a name already on the roster (or repeated in the pasted text) is silently skipped rather than rejected, so re-pasting a roster someone's already started doesn't need to be hand-trimmed first. Added `parseQuickAddNames()` (`js/logic.js`) and `quickAddEntities()` (`js/app.js`).

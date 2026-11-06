@@ -47,6 +47,12 @@ var transactionEntries = [];
 var localTransactionEntries = [];
 var refreshTimer = 60;
 var countdownInterval = null;
+// Guards handleAuthFailure() against firing more than once per page load —
+// several independent checks can all notice the same dead token around the
+// same time (e.g. updateConnectedAccountStatus() and the initial fetchAll()
+// both run right from initApp()), and without this a genuinely expired
+// session could pop two native alert() dialogs back to back.
+var authFailureHandled = false;
 var currentMgmtTab = 'settings';
 var isSubmittingTransaction = false;
 // The logicalId of the one entry *this device* most recently submitted via
@@ -575,11 +581,27 @@ async function authFetch(url, buildOptions) {
 // device accidentally authenticated against the wrong account is obvious
 // immediately instead of silently showing an empty/unrelated event. Every
 // role requests account_info.read (even the read-only viewer), so this
-// works the same everywhere. Fire-and-forget and best-effort: a failed
-// lookup just leaves the generic "Connected" text already shown, never
-// blocks or fails the rest of startup.
+// works the same everywhere.
+//
+// Doubles as the app's earliest check that a stored token is actually
+// still good: it runs right at startup, before the operator has clicked
+// anything. A genuinely dead token+refresh-token pair (expired, revoked
+// from Dropbox's side, or just very old) used to leave this silently
+// returning while the header kept showing "Connected" from the optimistic
+// UI initApp() shows as soon as it sees a token in localStorage — the
+// operator had no way to know they weren't actually authenticated until
+// some later action (e.g. Generate Viewer Link, Submit Vote) hit a real
+// API call and failed. authFetch() already tries one silent refresh
+// before giving up, so a confirmed 'unauthorized' here means that already
+// failed too — a real "please sign in again" moment, not a transient
+// network hiccup (which still fails best-effort, below, exactly as
+// before: no need to force a sign-out over a dropped connection).
 async function updateConnectedAccountStatus() {
     const result = await storageProvider.fetchAccountInfo(authFetch, () => accessToken);
+    if (result.status === 'unauthorized') {
+        handleAuthFailure();
+        return;
+    }
     if (result.status !== 'ok') return;
     connectedAccountEmail = result.email;
     const statusEl = document.getElementById('status');
@@ -596,6 +618,8 @@ function reloadPage() {
 }
 
 function handleAuthFailure() {
+    if (authFailureHandled) return;
+    authFailureHandled = true;
     window.localStorage.removeItem('dropbox_token');
     window.localStorage.removeItem('dropbox_refresh_token');
     accessToken = null;

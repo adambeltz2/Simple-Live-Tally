@@ -1192,6 +1192,62 @@ test('DOM: connected account status (which Dropbox account is this device on)', 
         assert.equal(window.connectedAccountEmail, null);
     });
 
+    await t.test(
+        'a confirmed-dead token (401, and no refresh token to silently recover with) triggers sign-out, not a silent failure',
+        async () => {
+            // This is the startup check that should catch a token left dead
+            // across a long-closed tab — before the operator clicks anything
+            // (e.g. Generate Viewer Link) and only then discovers, via a
+            // confusing failure, that they were never actually connected.
+            const window = loadApp();
+            window.localStorage.setItem('dropbox_token', 'tok123');
+            window.accessToken = 'tok123';
+            window.document.getElementById('status').innerText = 'Connected';
+            window.fetch = async () => ({ ok: false, status: 401 });
+            let alerted = null;
+            window.alert = (msg) => {
+                alerted = msg;
+            };
+            let reloaded = false;
+            window.reloadPage = () => {
+                reloaded = true;
+            };
+
+            await window.updateConnectedAccountStatus();
+
+            assert.match(alerted, /session has expired/);
+            assert.equal(reloaded, true);
+            assert.equal(window.localStorage.getItem('dropbox_token'), null, 'the dead token must be cleared');
+            assert.equal(window.accessToken, null);
+        },
+    );
+
+    await t.test(
+        'handleAuthFailure only alerts/reloads once even if multiple checks notice the same dead token',
+        () => {
+            // updateConnectedAccountStatus() and the initial fetchAll() both run
+            // from initApp() and can both independently discover the same
+            // expired session — without this guard the operator would see two
+            // native alert() dialogs back to back.
+            const window = loadApp();
+            window.localStorage.setItem('dropbox_token', 'tok123');
+            let alertCount = 0;
+            window.alert = () => {
+                alertCount++;
+            };
+            let reloadCount = 0;
+            window.reloadPage = () => {
+                reloadCount++;
+            };
+
+            window.handleAuthFailure();
+            window.handleAuthFailure();
+
+            assert.equal(alertCount, 1);
+            assert.equal(reloadCount, 1);
+        },
+    );
+
     await t.test('initApp() triggers the account lookup once connected', async () => {
         const window = loadApp();
         window.localStorage.setItem('dropbox_token', 'tok123');
