@@ -1119,6 +1119,7 @@ function addEntity() {
     const namePublic = document.getElementById('new-ent-public').value.trim();
     const namePrivate = document.getElementById('new-ent-private').value;
     const imageUrl = document.getElementById('new-ent-img').value;
+    const isDonationType = document.getElementById('new-ent-donation').checked;
     if (!namePublic) return alert('Public Name required.');
 
     const exists = isDuplicateName(appData.entities, namePublic);
@@ -1133,11 +1134,13 @@ function addEntity() {
             namePrivate,
             imageUrl,
             color: colors[Math.floor(Math.random() * colors.length)],
+            isDonationType,
         });
     });
     document.getElementById('new-ent-public').value = '';
     document.getElementById('new-ent-private').value = '';
     document.getElementById('new-ent-img').value = '';
+    document.getElementById('new-ent-donation').checked = false;
 }
 
 // Bulk-creates teams from a pasted, newline/comma-separated list of names —
@@ -1179,6 +1182,7 @@ function editEntity(id) {
     const newPriv = document.getElementById(`ent-priv-${id}`).value;
     const newImg = document.getElementById(`ent-img-${id}`).value;
     const newCol = document.getElementById(`ent-col-${id}`).value;
+    const newIsDonationType = document.getElementById(`ent-donation-${id}`).checked;
 
     if (!newPub) return alert('Public Name required.');
 
@@ -1194,6 +1198,7 @@ function editEntity(id) {
             ent.namePrivate = newPriv;
             ent.imageUrl = newImg;
             ent.color = newCol;
+            ent.isDonationType = newIsDonationType;
         }
     });
 }
@@ -1548,6 +1553,10 @@ function renderManagement() {
                         <input type="url" id="ent-img-${ent.id}" value="${escapeHtml(ent.imageUrl)}" class="min-w-0 flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-sm shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Image URL">
                         <select id="ent-col-${ent.id}" class="min-w-0 flex-shrink-0 p-2 border border-gray-400 dark:border-gray-600 rounded text-sm ${ent.color} text-white font-semibold shadow-inner outline-none">${colorOptions}</select>
                     </div>
+                    <label class="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-400">
+                        <input type="checkbox" id="ent-donation-${ent.id}" class="mt-0.5 min-w-0 flex-shrink-0" ${ent.isDonationType ? 'checked' : ''}>
+                        <span>Donation type, not a team — counts toward the goal but is shown separately, not ranked on the leaderboard.</span>
+                    </label>
                     <div class="flex justify-between items-center mt-1 border-t dark:border-gray-700 pt-3">
                         <button data-action="edit-entity" data-id="${ent.id}" class="text-xs bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 font-semibold py-1.5 px-4 rounded transition-colors">Save Changes</button>
                         <button data-action="purge-entity" data-id="${ent.id}" class="text-xs bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 font-semibold py-1.5 px-3 rounded transition-colors" title="Remove team from the dashboard (transactions stay in the audit ledger)">Remove Team</button>
@@ -1674,8 +1683,14 @@ function renderApp() {
         renderEntitySuggestions();
     }
 
+    // totals covers every entity, teams and donation types alike — both
+    // need their running total, just not the same treatment below (teams
+    // rank on the leaderboard, donation types get their own summary so a
+    // donation drive's money isn't just invisibly folded into the goal).
     const totals = computeTotals(appData.entities, getVisibleTransactionEntries(), displayEventId);
-    const sortedEntities = sortEntitiesByTotal(appData.entities, totals);
+    const teamEntities = appData.entities.filter((ent) => !ent.isDonationType);
+    const donationTypeEntities = appData.entities.filter((ent) => ent.isDonationType);
+    const sortedEntities = sortEntitiesByTotal(teamEntities, totals);
 
     // --- Render Goal Gauge ---
     const gaugeContainer = document.getElementById('goal-gauge-container');
@@ -1753,6 +1768,35 @@ function renderApp() {
     } else {
         gaugeContainer.innerHTML = '';
         gaugeContainer.classList.add('hidden');
+    }
+
+    // --- Render Other Donations (non-team totals: General Fund + any
+    // custom donation-type entities) ---
+    // These already count toward the goal above (computeEventTotal sums
+    // every transaction regardless of entityId) but were otherwise
+    // invisible — not shown anywhere, just silently folded into the total.
+    // A compact chip row, not a ranked list: these aren't competing for a
+    // "place", so there's no rank number or leader-relative bar to show,
+    // just the name and running total. Hidden entirely unless there's
+    // something to show, so an event that doesn't use this feature sees no
+    // extra UI.
+    const donationSection = document.getElementById('donation-types-section');
+    const generalFundTotal = computeGeneralFundTotal(getVisibleTransactionEntries(), displayEventId);
+    const donationRows = donationTypeEntities
+        .map((ent) => ({ label: ent.namePublic, amount: totals[ent.id] || 0 }))
+        .concat(generalFundTotal > 0 ? [{ label: 'General Fund', amount: generalFundTotal }] : []);
+    if (donationRows.length > 0) {
+        const donationTextSize = isTvMode ? 'text-sm' : 'text-xs';
+        donationSection.innerHTML = donationRows
+            .map(
+                (row) =>
+                    `<span class="${donationTextSize} font-semibold px-2.5 py-1 rounded-full bg-pink-100 dark:bg-pink-900/40 text-pink-700 dark:text-pink-300">${escapeHtml(row.label)}: $${row.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`,
+            )
+            .join('');
+        donationSection.classList.remove('hidden');
+    } else {
+        donationSection.innerHTML = '';
+        donationSection.classList.add('hidden');
     }
 
     // --- Render Leaderboard (Minimal Ticker) ---

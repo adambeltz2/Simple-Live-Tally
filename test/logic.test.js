@@ -7,6 +7,7 @@ const {
     GENERAL_FUND_ID,
     isGeneralFundEntry,
     computeEventTotal,
+    computeGeneralFundTotal,
     computeRelativeBarPercent,
     GENERAL_FUND_LABEL,
     resolveEntitySelection,
@@ -132,6 +133,23 @@ test('computeEventTotal', async (t) => {
     await t.test('handles missing/empty inputs', () => {
         assert.equal(computeEventTotal([], 'evt1'), 0);
         assert.equal(computeEventTotal(undefined, 'evt1'), 0);
+    });
+});
+
+test('computeGeneralFundTotal', async (t) => {
+    await t.test('sums only General Fund entries for the event, excluding team-tied donations', () => {
+        const transactions = [
+            { entityId: 'e1', eventId: 'evt1', amount: 10 },
+            { entityId: GENERAL_FUND_ID, eventId: 'evt1', amount: 100 },
+            { entityId: GENERAL_FUND_ID, eventId: 'evt1', amount: 50 },
+            { entityId: GENERAL_FUND_ID, eventId: 'evt2', amount: 999 }, // different event, excluded
+        ];
+        assert.equal(computeGeneralFundTotal(transactions, 'evt1'), 150);
+    });
+
+    await t.test('handles missing/empty inputs', () => {
+        assert.equal(computeGeneralFundTotal([], 'evt1'), 0);
+        assert.equal(computeGeneralFundTotal(undefined, 'evt1'), 0);
     });
 });
 

@@ -162,6 +162,13 @@
                     
                     <div id="goal-gauge-container" class="flex-shrink-0 w-full flex justify-center mb-4 transition-all"></div>
 
+                    <!-- Other Donations: non-team totals (General Fund, and
+                         any custom donation-type entities — see
+                         entity.isDonationType) that count toward the goal
+                         above but don't belong on the team leaderboard.
+                         Hidden entirely when there's nothing to show. -->
+                    <div id="donation-types-section" class="hidden flex-shrink-0 w-full flex flex-wrap gap-2 mb-4"></div>
+
                     <!-- Leaderboard: the tiered "Minimal Ticker" layout (see
                          renderApp() in js/app.js) — the TV display never scrolls
                          (paginates instead once there's more than fits legibly),
@@ -245,6 +252,10 @@
                             <input type="text" id="new-ent-public" placeholder="Public Name" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-2 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
                             <input type="text" id="new-ent-private" placeholder="Private Name (Optional)" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-2 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
                             <input type="url" id="new-ent-img" placeholder="Image URL (Optional)" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-2 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+                            <label class="flex items-start gap-2 mb-3 text-xs text-gray-600 dark:text-gray-400">
+                                <input type="checkbox" id="new-ent-donation" class="mt-0.5 min-w-0 flex-shrink-0">
+                                <span>This is a donation type, not a team (e.g. "Raffle", "Bake Sale") — counts toward the goal but is shown separately, not ranked on the leaderboard.</span>
+                            </label>
                             <button id="add-entity-btn" class="w-full bg-blue-600 text-white font-semibold py-2 rounded text-sm hover:opacity-90">Add Entity</button>
                         </div>
 
@@ -306,7 +317,7 @@
 
     <!-- Footer -->
     <footer id="main-footer" class="flex-shrink-0 text-center text-sm text-gray-500 py-4 mt-auto">
-        <p class="font-medium">Simple Live Tally <span class="font-bold">v2.8.1</span></p>
+        <p class="font-medium">Simple Live Tally <span class="font-bold">v2.9.0</span></p>
         <p class="mt-1 space-x-2">
             <a href="https://github.com/adambeltz2/Simple-Live-Tally" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">GitHub</a>
             <span>|</span>

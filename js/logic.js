@@ -82,6 +82,19 @@
         return (transactions || []).filter((t) => t.eventId === eventId).reduce((sum, t) => sum + t.amount, 0);
     }
 
+    // The General Fund's own running total — the built-in, always-available
+    // "no team" donation bucket, kept separate from computeTotals() (which
+    // only sums entries tied to a real entity) the same way computeEventTotal
+    // above is. Used to show it alongside custom donation-type entities (see
+    // entity.isDonationType) in the dashboard's "Other Donations" summary,
+    // rather than leaving General Fund money counted toward the goal but
+    // invisible everywhere, as it was before that summary existed.
+    function computeGeneralFundTotal(transactions, eventId) {
+        return (transactions || [])
+            .filter((t) => t.eventId === eventId && isGeneralFundEntry(t.entityId))
+            .reduce((sum, t) => sum + t.amount, 0);
+    }
+
     // The General Fund's entry in the Entity search field (see
     // resolveEntitySelection() below) — shown as one of the choices in
     // index.html's #entity-options <datalist>, alongside every team name.
@@ -443,6 +456,7 @@
         GENERAL_FUND_ID,
         isGeneralFundEntry,
         computeEventTotal,
+        computeGeneralFundTotal,
         GENERAL_FUND_LABEL,
         resolveEntitySelection,
         resolveThemeColor,

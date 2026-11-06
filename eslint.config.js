@@ -13,6 +13,7 @@ const logicGlobals = {
     GENERAL_FUND_ID: 'readonly',
     isGeneralFundEntry: 'readonly',
     computeEventTotal: 'readonly',
+    computeGeneralFundTotal: 'readonly',
     GENERAL_FUND_LABEL: 'readonly',
     resolveEntitySelection: 'readonly',
     resolveThemeColor: 'readonly',

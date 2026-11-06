@@ -327,6 +327,118 @@ test('DOM: dashboard rendering', async (t) => {
         );
     });
 
+    await t.test('a donation-type entity counts toward the goal but is excluded from the team leaderboard', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            events: [{ id: 'evt1', name: 'Main', goalAmount: 200, startDate: '', endDate: '' }],
+            entities: [
+                { id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' },
+                {
+                    id: 'e2',
+                    namePublic: 'Raffle',
+                    namePrivate: '',
+                    imageUrl: '',
+                    color: 'bg-pink-500',
+                    isDonationType: true,
+                },
+            ],
+        });
+        window.transactionEntries = [
+            baseEntry({ id: 't1', logicalId: 't1', entityId: 'e1', eventId: 'evt1', amount: 50 }),
+            baseEntry({ id: 't2', logicalId: 't2', entityId: 'e2', eventId: 'evt1', amount: 75 }),
+        ];
+
+        window.renderApp();
+
+        const board = window.document.getElementById('leaderboard');
+        assert.equal(board.children.length, 1, 'the donation-type entity must not appear as a leaderboard row');
+        assert.doesNotMatch(board.innerHTML, /Raffle/, 'the donation type must not show up in the team ranking');
+        assert.match(
+            window.document.getElementById('goal-gauge-container').innerHTML,
+            /\$125/,
+            'the goal gauge total must still include the donation type (50 + 75)',
+        );
+
+        const donationSection = window.document.getElementById('donation-types-section');
+        assert.equal(donationSection.classList.contains('hidden'), false);
+        assert.match(donationSection.innerHTML, /Raffle: \$75\.00/);
+    });
+
+    await t.test('the Other Donations section combines custom donation types with a nonzero General Fund total', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            events: [{ id: 'evt1', name: 'Main', goalAmount: 200, startDate: '', endDate: '' }],
+            entities: [
+                {
+                    id: 'e1',
+                    namePublic: 'Raffle',
+                    namePrivate: '',
+                    imageUrl: '',
+                    color: 'bg-pink-500',
+                    isDonationType: true,
+                },
+            ],
+        });
+        window.transactionEntries = [
+            baseEntry({ id: 't1', logicalId: 't1', entityId: 'e1', eventId: 'evt1', amount: 20 }),
+            baseEntry({ id: 't2', logicalId: 't2', entityId: window.GENERAL_FUND_ID, eventId: 'evt1', amount: 15 }),
+        ];
+
+        window.renderApp();
+
+        const donationSection = window.document.getElementById('donation-types-section');
+        assert.match(donationSection.innerHTML, /Raffle: \$20\.00/);
+        assert.match(donationSection.innerHTML, /General Fund: \$15\.00/);
+    });
+
+    await t.test(
+        'the Other Donations section stays hidden when there are no donation types and no General Fund activity',
+        () => {
+            const window = loadApp();
+            window.appData = baseAppData({
+                events: [{ id: 'evt1', name: 'Main', goalAmount: 200, startDate: '', endDate: '' }],
+                entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+            });
+            window.transactionEntries = [
+                baseEntry({ id: 't1', logicalId: 't1', entityId: 'e1', eventId: 'evt1', amount: 50 }),
+            ];
+
+            window.renderApp();
+
+            const donationSection = window.document.getElementById('donation-types-section');
+            assert.equal(donationSection.classList.contains('hidden'), true);
+            assert.equal(donationSection.innerHTML, '');
+        },
+    );
+
+    await t.test(
+        'a donation-type entity with a zero balance still shows in Other Donations (it was deliberately created)',
+        () => {
+            const window = loadApp();
+            window.appData = baseAppData({
+                events: [{ id: 'evt1', name: 'Main', goalAmount: 200, startDate: '', endDate: '' }],
+                entities: [
+                    { id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' },
+                    {
+                        id: 'e2',
+                        namePublic: 'Bake Sale',
+                        namePrivate: '',
+                        imageUrl: '',
+                        color: 'bg-pink-500',
+                        isDonationType: true,
+                    },
+                ],
+            });
+            window.transactionEntries = [];
+
+            window.renderApp();
+
+            const donationSection = window.document.getElementById('donation-types-section');
+            assert.equal(donationSection.classList.contains('hidden'), false);
+            assert.match(donationSection.innerHTML, /Bake Sale: \$0\.00/);
+        },
+    );
+
     await t.test('the goal gauge follows the actual light/dark theme, not just TV mode, on a light TV display', () => {
         // Regression guard: the gauge used to hardcode `isTvMode ||
         // <dark check>`, which meant it always rendered dark-mode colors on
@@ -720,6 +832,79 @@ test('DOM: input validation', async (t) => {
         window.addEntity();
 
         assert.equal(window.appData.entities.length, 0, 'no entity should be added');
+    });
+
+    await t.test(
+        'addEntity saves isDonationType when the "donation type, not a team" checkbox is checked',
+        async () => {
+            const window = loadApp();
+            window.appData = baseAppData();
+            window.accessToken = 'fake-token';
+            window.alert = () => {};
+            window.switchTab('management');
+            window.switchMgmtTab('entities');
+
+            window.fetch = async (url) => {
+                if (String(url).includes('/files/download')) {
+                    return {
+                        ok: true,
+                        status: 200,
+                        headers: { get: () => JSON.stringify({ rev: 'rev1' }) },
+                        json: async () => window.appData,
+                    };
+                }
+                if (String(url).includes('/files/upload')) {
+                    return { ok: true, status: 200, json: async () => ({ rev: 'rev-next' }) };
+                }
+                throw new Error('unexpected fetch URL: ' + url);
+            };
+
+            window.document.getElementById('new-ent-public').value = 'Raffle';
+            window.document.getElementById('new-ent-donation').checked = true;
+            window.addEntity();
+            await flushAsync();
+
+            assert.equal(window.appData.entities.length, 1);
+            assert.equal(window.appData.entities[0].isDonationType, true);
+            assert.equal(
+                window.document.getElementById('new-ent-donation').checked,
+                false,
+                'the checkbox should reset after a successful add, like the other fields',
+            );
+        },
+    );
+
+    await t.test('editEntity can toggle isDonationType on an existing entity', async () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+        });
+        window.accessToken = 'fake-token';
+        window.alert = () => {};
+        window.switchTab('management');
+        window.switchMgmtTab('entities');
+        window.renderManagement();
+
+        window.fetch = async (url) => {
+            if (String(url).includes('/files/download')) {
+                return {
+                    ok: true,
+                    status: 200,
+                    headers: { get: () => JSON.stringify({ rev: 'rev1' }) },
+                    json: async () => window.appData,
+                };
+            }
+            if (String(url).includes('/files/upload')) {
+                return { ok: true, status: 200, json: async () => ({ rev: 'rev-next' }) };
+            }
+            throw new Error('unexpected fetch URL: ' + url);
+        };
+
+        window.document.getElementById('ent-donation-e1').checked = true;
+        window.editEntity('e1');
+        await flushAsync();
+
+        assert.equal(window.appData.entities[0].isDonationType, true);
     });
 
     await t.test('quickAddEntities rejects empty input without attempting to save', () => {

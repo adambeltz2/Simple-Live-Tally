@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] - 2026-11-06
+### Added
+- **Donation types**: teams can now be marked "donation type, not a team" (Data Management > Teams — a checkbox on both Register New Entity and each existing team's edit card). Same idea as the existing General Fund "no team" donation, but user-named and plural — e.g. "Raffle", "Bake Sale" — so a fundraiser running more than one kind of no-team donation can track them separately instead of everything blurring into one bucket. A donation type's total counts toward the event goal exactly like a team's does, but it's excluded from the team leaderboard ranking and shown instead in a new, compact "Other Donations" summary (dashboard and TV alike) alongside the General Fund total whenever either is nonzero. Added `computeGeneralFundTotal()` (`js/logic.js`).
+
 ## [2.8.1] - 2026-11-06
 ### Fixed
 - **A dead Dropbox token used to stay silently "Connected" until some later action failed.** `initApp()` shows the dashboard optimistically as soon as it sees a token in localStorage, before confirming it's still good — a tab left open for weeks (or a token revoked from Dropbox's side) left the header reading "Connected" right up until an admin action (e.g. Generate Viewer Link) hit a real API call and failed with a confusing error. `updateConnectedAccountStatus()` already makes exactly this validity check at startup via `fetchAccountInfo()`, but used to swallow a confirmed-dead token silently. It now calls `handleAuthFailure()` — the same "please sign in again" prompt other API calls already trigger — the moment a dead token is detected, before the operator can click into a dashboard that isn't actually usable. `handleAuthFailure()` also gained a one-shot guard, since more than one startup check can now notice the same dead token concurrently and it previously had no protection against alerting/reloading twice.
