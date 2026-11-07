@@ -46,6 +46,33 @@
         return [...(entities || [])].sort((a, b) => (totals[b.id] || 0) - (totals[a.id] || 0));
     }
 
+    // Competition ranking ("1224"-style, the golf-leaderboard convention):
+    // entities tied on amount share the same rank number, and the next
+    // distinct amount skips straight to its true row position (1, 1, 3)
+    // instead of a plain running count (1, 2, 3) that would quietly imply
+    // the second of two tied teams is trailing the first. sortedEntities
+    // must already be highest-total-first (see sortEntitiesByTotal above —
+    // ties are detected purely by equal totals, never by array position).
+    // Returns one { rank, isTied } per entity, in the same order/index as
+    // sortedEntities.
+    function computeLeaderboardRanks(sortedEntities, totals) {
+        const entities = sortedEntities || [];
+        const result = [];
+        let i = 0;
+        while (i < entities.length) {
+            const amount = totals[entities[i].id] || 0;
+            let j = i + 1;
+            while (j < entities.length && (totals[entities[j].id] || 0) === amount) j++;
+            const rank = i + 1;
+            const isTied = j - i > 1;
+            for (let k = i; k < j; k++) {
+                result.push({ rank, isTied });
+            }
+            i = j;
+        }
+        return result;
+    }
+
     // Scales a team's amount against the leaderboard leader's amount, for
     // the small per-team color bar in the "Minimal Ticker" leaderboard (see
     // heroRowHtml/fieldRowHtml in js/app.js) — the bar's length itself shows
@@ -452,6 +479,7 @@
         escapeHtml,
         computeTotals,
         sortEntitiesByTotal,
+        computeLeaderboardRanks,
         computeRelativeBarPercent,
         GENERAL_FUND_ID,
         isGeneralFundEntry,

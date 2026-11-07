@@ -715,6 +715,53 @@ test('DOM: dashboard rendering', async (t) => {
         return { entities, entries };
     }
 
+    await t.test(
+        'tied teams share a "T"-prefixed rank with a Tied chip, and the next team skips to its true rank',
+        () => {
+            const window = loadApp();
+            window.appData = baseAppData({
+                entities: [
+                    { id: 'e1', namePublic: 'Soup 01', namePrivate: '', imageUrl: '', color: 'bg-green-500' },
+                    { id: 'e2', namePublic: 'Soup 02', namePrivate: '', imageUrl: '', color: 'bg-blue-500' },
+                    { id: 'e3', namePublic: 'Soup 03', namePrivate: '', imageUrl: '', color: 'bg-purple-500' },
+                ],
+            });
+            window.transactionEntries = [
+                baseEntry({ id: 't1', logicalId: 't1', entityId: 'e1', amount: 50 }),
+                baseEntry({ id: 't2', logicalId: 't2', entityId: 'e2', amount: 50 }),
+                baseEntry({ id: 't3', logicalId: 't3', entityId: 'e3', amount: 30 }),
+            ];
+
+            window.renderApp();
+
+            const board = window.document.getElementById('leaderboard');
+            const rows = Array.from(board.children);
+            assert.equal(rows.length, 3);
+            assert.match(rows[0].textContent, /T1/);
+            assert.match(rows[0].textContent, /Tied/);
+            assert.match(rows[1].textContent, /T1/);
+            assert.match(rows[1].textContent, /Tied/);
+            assert.match(rows[2].textContent, /Soup 03/);
+            assert.doesNotMatch(rows[2].textContent, /Tied/, "the untied third row shouldn't show a Tied chip");
+            // "3", not "2" — the tied pair shares rank 1, so the next distinct
+            // amount must still land on its true row position.
+            assert.match(rows[2].innerHTML, /font-extrabold tabular-nums text-gray-400[^>]*>3</);
+        },
+    );
+
+    await t.test('no ties means plain rank numbers and no Tied chip anywhere', () => {
+        const window = loadApp();
+        const { entities, entries } = makeRoster(3);
+        window.appData = baseAppData({ entities });
+        window.transactionEntries = entries;
+
+        window.renderApp();
+
+        const board = window.document.getElementById('leaderboard');
+        assert.doesNotMatch(board.innerHTML, /Tied/);
+        assert.doesNotMatch(board.innerHTML, />T\d/, 'no row should get a "T"-prefixed rank when nobody is tied');
+    });
+
     await t.test('a roster past TICKER_HERO_MAX switches to the twin-column tier', () => {
         const window = loadApp();
         const { entities, entries } = makeRoster(9);

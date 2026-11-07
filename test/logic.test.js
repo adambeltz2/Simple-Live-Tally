@@ -4,6 +4,7 @@ const {
     escapeHtml,
     computeTotals,
     sortEntitiesByTotal,
+    computeLeaderboardRanks,
     GENERAL_FUND_ID,
     isGeneralFundEntry,
     computeEventTotal,
@@ -215,6 +216,54 @@ test('sortEntitiesByTotal', async (t) => {
         const entities = [{ id: 'a' }, { id: 'b' }];
         const sorted = sortEntitiesByTotal(entities, {});
         assert.equal(sorted.length, 2);
+    });
+});
+
+test('computeLeaderboardRanks', async (t) => {
+    await t.test('assigns a plain running rank when nobody is tied', () => {
+        const sorted = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+        const totals = { a: 30, b: 20, c: 10 };
+        assert.deepEqual(computeLeaderboardRanks(sorted, totals), [
+            { rank: 1, isTied: false },
+            { rank: 2, isTied: false },
+            { rank: 3, isTied: false },
+        ]);
+    });
+
+    await t.test('a tie for first shares rank 1, and the next distinct amount skips to 3', () => {
+        const sorted = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+        const totals = { a: 50, b: 50, c: 30 };
+        assert.deepEqual(computeLeaderboardRanks(sorted, totals), [
+            { rank: 1, isTied: true },
+            { rank: 1, isTied: true },
+            { rank: 3, isTied: false },
+        ]);
+    });
+
+    await t.test('a tie further down the board (not for first) is still detected correctly', () => {
+        const sorted = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
+        const totals = { a: 100, b: 50, c: 50, d: 10 };
+        assert.deepEqual(computeLeaderboardRanks(sorted, totals), [
+            { rank: 1, isTied: false },
+            { rank: 2, isTied: true },
+            { rank: 2, isTied: true },
+            { rank: 4, isTied: false },
+        ]);
+    });
+
+    await t.test('a three-way tie all shares the same rank', () => {
+        const sorted = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+        const totals = { a: 50, b: 50, c: 50 };
+        assert.deepEqual(computeLeaderboardRanks(sorted, totals), [
+            { rank: 1, isTied: true },
+            { rank: 1, isTied: true },
+            { rank: 1, isTied: true },
+        ]);
+    });
+
+    await t.test('handles missing/empty inputs', () => {
+        assert.deepEqual(computeLeaderboardRanks([], {}), []);
+        assert.deepEqual(computeLeaderboardRanks(undefined, {}), []);
     });
 });
 

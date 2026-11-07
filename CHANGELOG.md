@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.0] - 2026-11-07
+### Added
+- **Ties now show on the leaderboard** instead of silently showing one team above the other for an identical total. Teams tied on amount share a "T"-prefixed rank (e.g. `T1`, `T1`) plus a small "Tied" chip — the golf-leaderboard convention — and the next distinct amount still ranks at its true row position (`T1`, `T1`, `3`, not `1`, `2`, `3`), so no row implies it's ahead of one it's dead even with. Added `computeLeaderboardRanks()` (`js/logic.js`).
+
 ## [2.9.0] - 2026-11-06
 ### Added
 - **Donation types**: teams can now be marked "donation type, not a team" (Data Management > Teams — a checkbox on both Register New Entity and each existing team's edit card). Same idea as the existing General Fund "no team" donation, but user-named and plural — e.g. "Raffle", "Bake Sale" — so a fundraiser running more than one kind of no-team donation can track them separately instead of everything blurring into one bucket. A donation type's total counts toward the event goal exactly like a team's does, but it's excluded from the team leaderboard ranking and shown instead in a new, compact "Other Donations" summary (dashboard and TV alike) alongside the General Fund total whenever either is nonzero. Added `computeGeneralFundTotal()` (`js/logic.js`).

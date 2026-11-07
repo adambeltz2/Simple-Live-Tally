@@ -1826,18 +1826,31 @@ function renderApp() {
     // (if any) holds the leader's amount every other row's bar scales
     // against — see computeRelativeBarPercent() in js/logic.js.
     const leaderAmount = sortedEntities.length > 0 ? totals[sortedEntities[0].id] || 0 : 0;
+    // Parallel array to sortedEntities: ranks[i] is { rank, isTied } for
+    // sortedEntities[i] — see computeLeaderboardRanks() in js/logic.js.
+    const ranks = computeLeaderboardRanks(sortedEntities, totals);
 
-    function heroRowHtml(ent, rank) {
+    function rankLabel(rankInfo) {
+        return rankInfo.isTied ? `T${rankInfo.rank}` : `${rankInfo.rank}`;
+    }
+
+    function heroRowHtml(ent, rankInfo) {
         const avatar = ent.imageUrl
             ? `<img src="${escapeHtml(ent.imageUrl)}" class="${avatarSize} rounded-full object-cover border border-gray-300 dark:border-gray-700 flex-shrink-0">`
             : '';
         const barPct = computeRelativeBarPercent(totals[ent.id], leaderAmount);
+        const tiedChip = rankInfo.isTied
+            ? `<span class="text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded-full flex-shrink-0">Tied</span>`
+            : '';
         return `
             <div class="flex items-baseline gap-3 py-2.5 border-b border-gray-200 dark:border-gray-800 last:border-b-0 break-inside-avoid">
-                <span class="font-extrabold tabular-nums text-gray-400 dark:text-gray-500 ${rankSize} flex-shrink-0">${rank}</span>
+                <span class="font-extrabold tabular-nums text-gray-400 dark:text-gray-500 ${rankSize} flex-shrink-0">${rankLabel(rankInfo)}</span>
                 ${avatar}
                 <div class="flex-1 min-w-0 flex flex-col gap-1">
-                    <span class="font-bold uppercase tracking-wide truncate ${nameSize} text-gray-900 dark:text-white">${escapeHtml(ent.namePublic)}</span>
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="font-bold uppercase tracking-wide truncate ${nameSize} text-gray-900 dark:text-white">${escapeHtml(ent.namePublic)}</span>
+                        ${tiedChip}
+                    </div>
                     <div class="h-[3px] w-24 max-w-full rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden">
                         <div class="h-full rounded-full ${ent.color || 'bg-blue-500'} transition-all duration-700 ease-out" data-bar-pct="${barPct}"></div>
                     </div>
@@ -1846,11 +1859,11 @@ function renderApp() {
             </div>`;
     }
 
-    function fieldRowHtml(ent, rank) {
+    function fieldRowHtml(ent, rankInfo) {
         const barPct = computeRelativeBarPercent(totals[ent.id], leaderAmount);
         return `
             <div class="flex items-baseline gap-2 py-1">
-                <span class="font-extrabold tabular-nums text-gray-400 dark:text-gray-500 text-xs w-6 flex-shrink-0">${rank}</span>
+                <span class="font-extrabold tabular-nums text-gray-400 dark:text-gray-500 text-xs w-6 flex-shrink-0">${rankLabel(rankInfo)}</span>
                 <div class="flex items-center gap-1.5 flex-1 min-w-0">
                     <div class="w-6 h-[3px] rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden flex-shrink-0">
                         <div class="h-full rounded-full ${ent.color || 'bg-blue-500'}" data-bar-pct="${barPct}"></div>
@@ -1864,16 +1877,16 @@ function renderApp() {
     const tier = pickTickerTier(sortedEntities.length);
 
     if (tier === 'hero') {
-        board.innerHTML = sortedEntities.map((ent, i) => heroRowHtml(ent, i + 1)).join('');
+        board.innerHTML = sortedEntities.map((ent, i) => heroRowHtml(ent, ranks[i])).join('');
     } else if (tier === 'twin') {
-        board.innerHTML = `<div class="columns-2 gap-6">${sortedEntities.map((ent, i) => heroRowHtml(ent, i + 1)).join('')}</div>`;
+        board.innerHTML = `<div class="columns-2 gap-6">${sortedEntities.map((ent, i) => heroRowHtml(ent, ranks[i])).join('')}</div>`;
     } else {
         const spotlight = sortedEntities.slice(0, TICKER_SPOTLIGHT_SIZE);
         const field = sortedEntities.slice(TICKER_SPOTLIGHT_SIZE).map((ent, i) => ({
             ent,
-            rank: i + 1 + TICKER_SPOTLIGHT_SIZE,
+            rankInfo: ranks[i + TICKER_SPOTLIGHT_SIZE],
         }));
-        const spotlightHtml = spotlight.map((ent, i) => heroRowHtml(ent, i + 1)).join('');
+        const spotlightHtml = spotlight.map((ent, i) => heroRowHtml(ent, ranks[i])).join('');
 
         let fieldSection = '';
         if (field.length > 0) {
@@ -1892,7 +1905,7 @@ function renderApp() {
                         .join('')}</div>`;
                 }
             }
-            const fieldRowsHtml = pageItems.map((item) => fieldRowHtml(item.ent, item.rank)).join('');
+            const fieldRowsHtml = pageItems.map((item) => fieldRowHtml(item.ent, item.rankInfo)).join('');
             // A plain divider, not a labeled "Also competing — N more"
             // callout — the field grid immediately below it already makes
             // the additional participants visible; it doesn't need a
