@@ -2344,6 +2344,141 @@ test('DOM: viewer link hand-off (second device with no Dropbox login of its own)
         assert.match(link, /[?&]ev=evt1(&|$)/);
     });
 
+    await t.test('completing viewer-link generation remembers the link locally, keyed by event', async () => {
+        const window = loadApp('http://localhost/?code=abc123');
+        window.localStorage.setItem('viewer_link_pkce_verifier', 'stub-verifier');
+        window.localStorage.setItem('viewer_link_pending_event_id', 'evt1');
+        window.localStorage.setItem('dropbox_token', 'admin-own-token');
+        window.fetch = async (url) => {
+            if (String(url).includes('oauth2/token')) {
+                return { ok: true, json: async () => ({ access_token: 'viewer-tok', refresh_token: 'viewer-rtok' }) };
+            }
+            throw new Error('unexpected fetch URL: ' + url);
+        };
+
+        await window.completeViewerLinkGeneration('abc123', 'stub-verifier');
+
+        const history = JSON.parse(window.localStorage.getItem('viewer_link_history'));
+        assert.match(history.evt1.url, /at=viewer-tok/);
+        assert.ok(history.evt1.generatedAt, 'should record when it was generated');
+    });
+
+    await t.test(
+        'generateViewerLink() warns before creating an extra link when one already exists for the event, and respects Cancel',
+        async () => {
+            const window = loadApp();
+            window.localStorage.setItem('dropbox_token', 'admin-own-token');
+            window.appData = baseAppData({
+                events: [{ id: 'evt1', name: 'Main', goalAmount: null, startDate: '', endDate: '' }],
+                activeEventId: 'evt1',
+            });
+            window.switchTab('management');
+            window.document.getElementById('viewer-link-event-select').value = 'evt1';
+            window.localStorage.setItem(
+                'viewer_link_history',
+                JSON.stringify({
+                    evt1: { url: 'https://example.com/#tv-viewer?at=old-tok', generatedAt: new Date().toISOString() },
+                }),
+            );
+            let confirmMessage = null;
+            window.confirm = (msg) => {
+                confirmMessage = msg;
+                return false; // Cancel
+            };
+
+            await window.generateViewerLink();
+
+            assert.match(confirmMessage, /already generated/);
+            assert.match(confirmMessage, /will NOT disable it/);
+            assert.equal(
+                window.localStorage.getItem('viewer_link_pkce_verifier'),
+                null,
+                'declining the warning must not start a new OAuth flow',
+            );
+        },
+    );
+
+    await t.test('generateViewerLink() proceeds once the existing-link warning is confirmed', async () => {
+        const window = loadApp();
+        window.localStorage.setItem('dropbox_token', 'admin-own-token');
+        window.appData = baseAppData({
+            events: [{ id: 'evt1', name: 'Main', goalAmount: null, startDate: '', endDate: '' }],
+            activeEventId: 'evt1',
+        });
+        window.switchTab('management');
+        window.document.getElementById('viewer-link-event-select').value = 'evt1';
+        window.localStorage.setItem(
+            'viewer_link_history',
+            JSON.stringify({
+                evt1: { url: 'https://example.com/#tv-viewer?at=old-tok', generatedAt: new Date().toISOString() },
+            }),
+        );
+        window.confirm = () => true;
+
+        await window.generateViewerLink();
+
+        assert.ok(window.localStorage.getItem('viewer_link_pkce_verifier'), 'confirming should let the flow proceed');
+    });
+
+    await t.test(
+        'renderViewerLinkStatus() shows the existing-link reminder only for an event that actually has one',
+        () => {
+            const window = loadApp();
+            window.appData = baseAppData({
+                events: [
+                    { id: 'evt1', name: 'First Event', goalAmount: null, startDate: '', endDate: '' },
+                    { id: 'evt2', name: 'Second Event', goalAmount: null, startDate: '', endDate: '' },
+                ],
+                activeEventId: 'evt1',
+            });
+            window.localStorage.setItem(
+                'viewer_link_history',
+                JSON.stringify({
+                    evt1: { url: 'https://example.com/#tv-viewer?at=old-tok', generatedAt: '2026-01-01T00:00:00.000Z' },
+                }),
+            );
+            window.switchTab('management');
+
+            const box = window.document.getElementById('viewer-link-existing');
+            assert.equal(box.classList.contains('hidden'), false, 'evt1 has a stored link');
+
+            window.document.getElementById('viewer-link-event-select').value = 'evt2';
+            window.renderViewerLinkStatus();
+            assert.equal(box.classList.contains('hidden'), true, 'evt2 has no stored link');
+        },
+    );
+
+    await t.test('showExistingViewerLink() redisplays a stored link without any network call', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            events: [{ id: 'evt1', name: 'Main', goalAmount: null, startDate: '', endDate: '' }],
+            activeEventId: 'evt1',
+        });
+        window.localStorage.setItem(
+            'viewer_link_history',
+            JSON.stringify({
+                evt1: {
+                    url: 'https://example.com/#tv-viewer?at=old-tok&rt=old-rtok',
+                    generatedAt: '2026-01-01T00:00:00.000Z',
+                },
+            }),
+        );
+        window.switchTab('management');
+        window.document.getElementById('viewer-link-event-select').value = 'evt1';
+        window.fetch = async () => {
+            throw new Error('showing an existing link must not make any network request');
+        };
+
+        window.showExistingViewerLink();
+
+        assert.equal(
+            window.document.getElementById('viewer-link-output').value,
+            'https://example.com/#tv-viewer?at=old-tok&rt=old-rtok',
+        );
+        assert.equal(window.document.getElementById('viewer-link-result').classList.contains('hidden'), false);
+        assert.match(window.document.getElementById('viewer-link-qr').innerHTML, /<svg/);
+    });
+
     await t.test(
         'importing a viewer link with a pinned event stores it locally, separate from the shared active event',
         () => {

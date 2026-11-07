@@ -428,6 +428,57 @@ async function handleAuthRedirect() {
     }
 }
 
+// Local-only memory of the most recent viewer link generated for each
+// event, on *this* admin device — never synced to appData/Dropbox, just a
+// convenience so Settings > Second Device can show "you already made one
+// of these" instead of only ever offering a blank Generate button. Dropbox
+// has no per-link revoke and generating a new link never disables an
+// older one (see the warning in generateViewerLink() below), so without
+// this, leaving the page and coming back made it easy to generate an
+// extra, different link without realizing an earlier one was still
+// perfectly good and already deployed to a device.
+const NO_EVENT_VIEWER_LINK_KEY = '__no_event__';
+
+function getViewerLinkHistory() {
+    try {
+        return JSON.parse(window.localStorage.getItem('viewer_link_history') || '{}');
+    } catch {
+        return {};
+    }
+}
+
+function saveViewerLinkHistoryEntry(eventId, url) {
+    const history = getViewerLinkHistory();
+    history[eventId || NO_EVENT_VIEWER_LINK_KEY] = { url, generatedAt: new Date().toISOString() };
+    window.localStorage.setItem('viewer_link_history', JSON.stringify(history));
+}
+
+// Shows/hides the "a link for this event already exists" reminder in
+// Settings > Second Device, based on the currently selected event and
+// getViewerLinkHistory() — called whenever that panel (re)renders and
+// whenever the event dropdown changes.
+function renderViewerLinkStatus() {
+    const eventId = document.getElementById('viewer-link-event-select').value;
+    const entry = getViewerLinkHistory()[eventId || NO_EVENT_VIEWER_LINK_KEY];
+    const statusBox = document.getElementById('viewer-link-existing');
+    if (!entry) {
+        statusBox.classList.add('hidden');
+        return;
+    }
+    document.getElementById('viewer-link-existing-date').innerText = new Date(entry.generatedAt).toLocaleString();
+    statusBox.classList.remove('hidden');
+}
+
+// Re-displays a previously generated link straight from local history —
+// no new OAuth round trip, since the link (and the token pair inside it)
+// is still exactly as valid as the day it was made.
+function showExistingViewerLink() {
+    const eventId = document.getElementById('viewer-link-event-select').value;
+    const entry = getViewerLinkHistory()[eventId || NO_EVENT_VIEWER_LINK_KEY];
+    if (!entry) return;
+    displayViewerLinkUrl(entry.url);
+}
+
 // Starts the OAuth flow for a *second device's* viewer link — see
 // buildViewerLinkUrl()/parseViewerLinkImport() in js/logic.js for the
 // hand-off itself. This runs from the admin's own already-authenticated
@@ -437,13 +488,22 @@ async function handleAuthRedirect() {
 // here ever writes to the plain "dropbox_token"/"dropbox_refresh_token"
 // keys the admin's own session uses.
 async function generateViewerLink() {
+    const eventId = document.getElementById('viewer-link-event-select').value;
+    const existing = getViewerLinkHistory()[eventId || NO_EVENT_VIEWER_LINK_KEY];
+    if (existing) {
+        const proceed = confirm(
+            `A viewer link for this event was already generated on ${new Date(existing.generatedAt).toLocaleString()} and is still active.\n\n` +
+                "Generating a new one will NOT disable it — Dropbox has no way to revoke just one link, so both will keep working indefinitely. If you've already set up a device with the existing link, you probably don't need a new one.\n\n" +
+                'Generate another link anyway?',
+        );
+        if (!proceed) return;
+    }
     const codeVerifier = generateRandomString(64);
     window.localStorage.setItem('viewer_link_pkce_verifier', codeVerifier);
     // Which event this link should pin the second device to (see
-    // getDisplayEventId() above) — captured now, before navigating away to
-    // Dropbox, and carried across that redirect the same way the PKCE
+    // getDisplayEventId() above) — captured above (before the existing-link
+    // check), and carried across the redirect the same way the PKCE
     // verifier is, since the OAuth round-trip reloads the page.
-    const eventId = document.getElementById('viewer-link-event-select').value;
     if (eventId) window.localStorage.setItem('viewer_link_pending_event_id', eventId);
     const codeChallenge = await generateCodeChallenge(codeVerifier);
     window.location.href = storageProvider.getAuthUrl({
@@ -518,9 +578,10 @@ function renderViewerLinkQr(url) {
     });
 }
 
-function showGeneratedViewerLink(accessToken, refreshToken, eventId) {
-    const baseUrl = window.location.origin + window.location.pathname;
-    const url = buildViewerLinkUrl(baseUrl, accessToken, refreshToken, eventId);
+// Shared by a freshly generated link and showExistingViewerLink() (re-
+// displaying one pulled from local history) — same markup, same QR, same
+// "Connected" status fix-up either way.
+function displayViewerLinkUrl(url) {
     document.getElementById('viewer-link-output').value = url;
     renderViewerLinkQr(url);
     document.getElementById('login-section').classList.replace('block', 'hidden');
@@ -529,6 +590,13 @@ function showGeneratedViewerLink(accessToken, refreshToken, eventId) {
     // reflect that here too, rather than leaving the header's default
     // "Not authenticated" text showing while they actually still are.
     document.getElementById('status').innerText = 'Connected';
+}
+
+function showGeneratedViewerLink(accessToken, refreshToken, eventId) {
+    const baseUrl = window.location.origin + window.location.pathname;
+    const url = buildViewerLinkUrl(baseUrl, accessToken, refreshToken, eventId);
+    saveViewerLinkHistoryEntry(eventId, url);
+    displayViewerLinkUrl(url);
 }
 
 async function copyViewerLink() {
@@ -1504,6 +1572,7 @@ function renderManagement() {
     viewerLinkEventSelect.value = appData.events.some((ev) => ev.id === previousViewerLinkSelection)
         ? previousViewerLinkSelection
         : appData.activeEventId;
+    renderViewerLinkStatus();
 
     const evList = document.getElementById('events-list');
     evList.innerHTML = '';
@@ -2005,6 +2074,8 @@ function bindStaticEventListeners() {
     document.getElementById('generate-viewer-link-btn').addEventListener('click', generateViewerLink);
     document.getElementById('viewer-link-copy-btn').addEventListener('click', copyViewerLink);
     document.getElementById('viewer-link-done-btn').addEventListener('click', () => window.location.reload());
+    document.getElementById('viewer-link-event-select').addEventListener('change', renderViewerLinkStatus);
+    document.getElementById('viewer-link-existing-show-btn').addEventListener('click', showExistingViewerLink);
     document.getElementById('tab-dashboard').addEventListener('click', () => switchTab('dashboard'));
     document.getElementById('tab-management').addEventListener('click', () => switchTab('management'));
     document.getElementById('submit-btn').addEventListener('click', submitTransaction);

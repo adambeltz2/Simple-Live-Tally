@@ -66,7 +66,7 @@ The operator's laptop (running "Add Transaction") and the screen the audience wa
 
 The event you picked in step 1 sticks to that device — it keeps showing that event even if you (or a `#keyer` station) switch the active event elsewhere, which matters if you're ever running two events at once and don't want every open TV flipping to whatever's active account-wide.
 
-**Keep that link private.** It carries the read-only connection itself — anyone who has it can view the event's live totals until you generate a new one (generating a new link doesn't revoke the old one; if you need to be sure an old link stops working, revoke Simple Live Tally's access from your [Dropbox account's connected-apps settings](https://www.dropbox.com/account/connected_apps) and generate a fresh one).
+**Keep that link private.** It carries the read-only connection itself — anyone who has it can view the event's live totals indefinitely. Generating a new link does **not** revoke the old one (Dropbox has no per-link revoke); if you need to be sure an old link stops working, revoke Simple Live Tally's access from your [Dropbox account's connected-apps settings](https://www.dropbox.com/account/connected_apps) and generate a fresh one. Settings > Second Device now remembers the last link generated for each event and shows a reminder before you'd otherwise create an extra, different one without meaning to.
 
 ### Option 2 — Sign in on the second device directly
 
