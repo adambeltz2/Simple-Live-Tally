@@ -176,6 +176,19 @@
                     <div id="leaderboard" class="flex-1 min-h-0 overflow-hidden pb-1">
                         <!-- Ticker rows injected here -->
                     </div>
+
+                    <!-- Bottom scrolling ticker — TV mode only, per-event opt-in
+                         (event.tickerEnabled, see renderApp() in js/app.js).
+                         flex-shrink-0 like leaderboard-header above: this always
+                         keeps its own reserved strip at the bottom of the screen
+                         so every team scrolls into view eventually, even a roster
+                         too long for the static grid above to show everyone at
+                         once without scrolling (which TV mode doesn't do). -->
+                    <div id="bottom-ticker-wrapper" class="hidden flex-shrink-0 bg-gray-900 text-white overflow-hidden py-2 mt-2 rounded border-t border-gray-800">
+                        <div id="bottom-ticker-content" class="animate-marquee flex items-center gap-8 whitespace-nowrap text-sm font-semibold">
+                            <!-- Dynamically populated -->
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -322,6 +335,10 @@
                                     <option value="bg-gray-900">Dark Gray</option>
                                 </select>
                             </div>
+                            <label class="flex items-start gap-2 mb-3 text-xs text-gray-600 dark:text-gray-400">
+                                <input type="checkbox" id="new-event-ticker" class="mt-0.5 min-w-0 flex-shrink-0">
+                                <span>Scroll every team across the bottom of the TV display — guarantees everyone's current standing is shown at some point, even a roster too long to all fit on screen at once.</span>
+                            </label>
                             <button id="add-event-btn" class="w-full bg-blue-600 text-white font-semibold py-2 rounded text-sm hover:opacity-90">Add Event</button>
                         </div>
 
@@ -345,7 +362,7 @@
 
     <!-- Footer -->
     <footer id="main-footer" class="flex-shrink-0 text-center text-sm text-gray-500 py-4 mt-auto">
-        <p class="font-medium">Simple Live Tally <span class="font-bold">v2.12.0</span></p>
+        <p class="font-medium">Simple Live Tally <span class="font-bold">v2.13.0</span></p>
         <p class="mt-1 space-x-2">
             <a href="https://github.com/adambeltz2/Simple-Live-Tally" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">GitHub</a>
             <span>|</span>

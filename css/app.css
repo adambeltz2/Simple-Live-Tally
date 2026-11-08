@@ -2,6 +2,22 @@
    rather than an inline <style> block so the CSP style-src directive in
    index.html can stay 'self' only, with no 'unsafe-inline'. */
 
+/* Bottom TV ticker (see #bottom-ticker-wrapper in index.html) — a single
+   copy of the content is duplicated once in the markup so this scrolls it
+   exactly one copy-width per cycle for a seamless, no-gap loop. */
+@keyframes marquee {
+    0% {
+        transform: translateX(0%);
+    }
+    100% {
+        transform: translateX(-50%);
+    }
+}
+.animate-marquee {
+    display: flex;
+    width: max-content;
+    animation: marquee 25s linear infinite;
+}
 /* Custom Scrollbar for inner lists */
 ::-webkit-scrollbar {
     width: 8px;

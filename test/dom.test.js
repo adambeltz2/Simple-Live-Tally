@@ -840,6 +840,79 @@ test('DOM: dashboard rendering', async (t) => {
     });
 
     await t.test(
+        'the bottom ticker shows on TV mode when the event opts in, with every team and a scaled scroll speed',
+        () => {
+            const window = loadApp();
+            const { entities, entries } = makeRoster(3);
+            window.appData = baseAppData({
+                events: [
+                    { id: 'evt1', name: 'Main', goalAmount: null, startDate: '', endDate: '', tickerEnabled: true },
+                ],
+                entities,
+            });
+            window.transactionEntries = entries;
+            window.location.hash = '#tv';
+            window.checkViewMode();
+
+            const wrapper = window.document.getElementById('bottom-ticker-wrapper');
+            assert.equal(wrapper.classList.contains('hidden'), false);
+            const content = window.document.getElementById('bottom-ticker-content');
+            entities.forEach((e) => assert.match(content.textContent, new RegExp(e.namePublic)));
+            // Content is duplicated once for the seamless loop, so each name appears twice.
+            assert.equal(content.textContent.match(/Team 0\b/g).length, 2);
+            assert.equal(content.style.animationDuration, '15s', '3 teams * 5s/entry');
+        },
+    );
+
+    await t.test('the bottom ticker reflects ties with the same "T"-prefixed rank as the main leaderboard', () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            events: [{ id: 'evt1', name: 'Main', goalAmount: null, startDate: '', endDate: '', tickerEnabled: true }],
+            entities: [
+                { id: 'e1', namePublic: 'Soup 01', namePrivate: '', imageUrl: '', color: 'bg-green-500' },
+                { id: 'e2', namePublic: 'Soup 02', namePrivate: '', imageUrl: '', color: 'bg-blue-500' },
+            ],
+        });
+        window.transactionEntries = [
+            baseEntry({ id: 't1', logicalId: 't1', entityId: 'e1', amount: 50 }),
+            baseEntry({ id: 't2', logicalId: 't2', entityId: 'e2', amount: 50 }),
+        ];
+        window.location.hash = '#tv';
+        window.checkViewMode();
+
+        const content = window.document.getElementById('bottom-ticker-content');
+        assert.match(content.innerHTML, />T1</);
+    });
+
+    await t.test('the bottom ticker stays hidden on the dashboard even when the event opts in — TV mode only', () => {
+        const window = loadApp();
+        const { entities, entries } = makeRoster(3);
+        window.appData = baseAppData({
+            events: [{ id: 'evt1', name: 'Main', goalAmount: null, startDate: '', endDate: '', tickerEnabled: true }],
+            entities,
+        });
+        window.transactionEntries = entries;
+
+        window.renderApp();
+
+        assert.equal(window.document.getElementById('bottom-ticker-wrapper').classList.contains('hidden'), true);
+    });
+
+    await t.test('the bottom ticker stays hidden in TV mode when the event has not opted in', () => {
+        const window = loadApp();
+        const { entities, entries } = makeRoster(3);
+        window.appData = baseAppData({
+            events: [{ id: 'evt1', name: 'Main', goalAmount: null, startDate: '', endDate: '' }],
+            entities,
+        });
+        window.transactionEntries = entries;
+        window.location.hash = '#tv';
+        window.checkViewMode();
+
+        assert.equal(window.document.getElementById('bottom-ticker-wrapper').classList.contains('hidden'), true);
+    });
+
+    await t.test(
         'a roster past TICKER_TWIN_MAX keeps the top 5 as a spotlight and moves the rest to a field grid',
         () => {
             const window = loadApp();
@@ -1412,6 +1485,60 @@ test('DOM: per-event branding (logo/theme color)', async (t) => {
 
         assert.equal(window.appData.events[0].logoUrl, 'https://example.com/new-logo.png');
         assert.equal(window.appData.events[0].themeColor, 'bg-green-600');
+    });
+
+    await t.test('addEvent saves tickerEnabled when the bottom-ticker checkbox is checked', async () => {
+        const window = loadApp();
+        window.appData = baseAppData({ events: [] });
+        window.accessToken = 'fake-token';
+        window.switchTab('management');
+        window.switchMgmtTab('events');
+        window.fetch = mockDropboxFetch({ config: window.appData });
+
+        window.document.getElementById('new-event-name').value = 'Cook-Off';
+        window.document.getElementById('new-event-ticker').checked = true;
+        window.addEvent();
+        await flushAsync();
+
+        assert.equal(window.appData.events[0].tickerEnabled, true);
+        assert.equal(
+            window.document.getElementById('new-event-ticker').checked,
+            false,
+            'the checkbox should reset after a successful add, like the other fields',
+        );
+    });
+
+    await t.test('editEvent can toggle tickerEnabled on an existing event', async () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            events: [
+                {
+                    id: 'evt1',
+                    name: 'Cook-Off',
+                    goalAmount: null,
+                    startDate: '',
+                    endDate: '',
+                    logoUrl: '',
+                    themeColor: '',
+                },
+            ],
+            activeEventId: 'evt1',
+        });
+        window.accessToken = 'fake-token';
+        window.switchTab('management');
+        window.switchMgmtTab('events');
+        window.fetch = mockDropboxFetch({ config: window.appData });
+
+        assert.equal(
+            window.document.getElementById('ev-ticker-evt1').checked,
+            false,
+            'an event with no stored preference defaults to unchecked',
+        );
+        window.document.getElementById('ev-ticker-evt1').checked = true;
+        window.editEvent('evt1');
+        await flushAsync();
+
+        assert.equal(window.appData.events[0].tickerEnabled, true);
     });
 });
 

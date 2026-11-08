@@ -1130,11 +1130,12 @@ function addEvent() {
     const goalAmount = parseFloat(document.getElementById('new-event-goal').value) || null;
     const logoUrl = document.getElementById('new-event-logo').value;
     const themeColor = document.getElementById('new-event-color').value;
+    const tickerEnabled = document.getElementById('new-event-ticker').checked;
     if (!name) return alert('Event Name required.');
     if (!isAllowedMediaUrl(logoUrl)) return alert('Logo URL must be a valid http:// or https:// link.');
     updateDataWrapper(() => {
         const newId = 'evt_' + Date.now();
-        appData.events.push({ id: newId, name, goalAmount, startDate, endDate, logoUrl, themeColor });
+        appData.events.push({ id: newId, name, goalAmount, startDate, endDate, logoUrl, themeColor, tickerEnabled });
         appData.activeEventId = newId;
     }).then(async (result) => {
         if (result.status === 'success') {
@@ -1149,6 +1150,7 @@ function addEvent() {
     document.getElementById('new-event-end').value = '';
     document.getElementById('new-event-logo').value = '';
     document.getElementById('new-event-color').value = '';
+    document.getElementById('new-event-ticker').checked = false;
 }
 
 function editEvent(id) {
@@ -1158,6 +1160,7 @@ function editEvent(id) {
     const newEnd = document.getElementById(`ev-end-${id}`).value;
     const newLogo = document.getElementById(`ev-logo-${id}`).value;
     const newColor = document.getElementById(`ev-color-${id}`).value;
+    const newTickerEnabled = document.getElementById(`ev-ticker-${id}`).checked;
     if (!isAllowedMediaUrl(newLogo)) return alert('Logo URL must be a valid http:// or https:// link.');
     updateDataWrapper(() => {
         const ev = appData.events.find((e) => e.id === id);
@@ -1168,6 +1171,7 @@ function editEvent(id) {
             ev.endDate = newEnd;
             ev.logoUrl = newLogo;
             ev.themeColor = newColor;
+            ev.tickerEnabled = newTickerEnabled;
         }
     });
 }
@@ -1612,6 +1616,10 @@ function renderManagement() {
                         <input type="url" id="ev-logo-${ev.id}" value="${escapeHtml(ev.logoUrl)}" class="min-w-0 flex-1 p-2 border border-gray-400 dark:border-gray-600 rounded text-xs shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Event Logo URL (Optional)">
                         <select id="ev-color-${ev.id}" class="min-w-0 flex-shrink-0 p-2 border border-gray-400 dark:border-gray-600 rounded text-xs shadow-inner bg-white dark:bg-gray-700 outline-none" title="Event Theme Color">${themeColorOptionsHtml(ev.themeColor)}</select>
                     </div>
+                    <label class="flex items-start gap-2 mb-1 text-xs text-gray-600 dark:text-gray-400">
+                        <input type="checkbox" id="ev-ticker-${ev.id}" class="mt-0.5 min-w-0 flex-shrink-0" ${ev.tickerEnabled ? 'checked' : ''}>
+                        <span>Scroll every team across the bottom of the TV display.</span>
+                    </label>
                     <div class="flex justify-between items-center mt-2 border-t dark:border-gray-700 pt-3">
                         <button data-action="edit-event" data-id="${ev.id}" class="text-xs bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 font-semibold py-1.5 px-4 rounded transition-colors">Save Changes</button>
                         <button data-action="purge-event" data-id="${ev.id}" class="text-xs bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 font-semibold py-1.5 px-3 rounded transition-colors" title="Remove event from the dashboard (transactions stay in the audit ledger)">Remove Event</button>
@@ -1731,6 +1739,7 @@ function renderApp() {
         document.getElementById('leaderboard').innerHTML =
             '<div class="text-center text-gray-500 mt-10 italic">Leaderboard is empty.</div>';
         document.getElementById('goal-gauge-container').innerHTML = '';
+        document.getElementById('bottom-ticker-wrapper').classList.add('hidden');
         return;
     } else {
         // Guarded by isSubmittingTransaction (not submitBtn.disabled) so this
@@ -2017,6 +2026,34 @@ function renderApp() {
         board.innerHTML = spotlightHtml + fieldSection;
     }
     applyBarWidths(board);
+
+    // --- Render Bottom Ticker (TV mode only, per-event opt-in via
+    // activeEvent.tickerEnabled) ---
+    // Independent of whichever tier (hero/twin/spotlight+field) the static
+    // leaderboard above picked: the whole point is a roster too long for
+    // that grid to show everyone at once without scrolling (which TV mode
+    // deliberately never does) still gets every team in front of people
+    // eventually, by waiting for it to scroll past rather than being cut
+    // off the bottom of the screen with no way to see it. Reuses the same
+    // tie-aware `ranks` the leaderboard above computed, so a tie shows the
+    // same "T1" here too, not a plain running count.
+    const tickerWrapper = document.getElementById('bottom-ticker-wrapper');
+    if (isTvMode && activeEvent && activeEvent.tickerEnabled && sortedEntities.length > 0) {
+        const tickerContent = document.getElementById('bottom-ticker-content');
+        let tickerHtml = '';
+        for (let i = 0; i < 2; i++) {
+            sortedEntities.forEach((ent, idx) => {
+                tickerHtml += `<div class="flex items-center gap-2 px-4"><span class="text-gray-400 font-bold">${rankLabel(ranks[idx])}</span> <span>${escapeHtml(ent.namePublic)}:</span> <span class="text-green-400 font-bold">$${formatAmount(totals[ent.id] || 0)}</span></div>`;
+            });
+        }
+        tickerContent.innerHTML = tickerHtml;
+        // Scales with the roster so pacing stays readable at any size —
+        // same 5s/entry formula the original top ticker used.
+        tickerContent.style.animationDuration = `${sortedEntities.length * 5}s`;
+        tickerWrapper.classList.remove('hidden');
+    } else {
+        tickerWrapper.classList.add('hidden');
+    }
 
     runCountdown();
 }
