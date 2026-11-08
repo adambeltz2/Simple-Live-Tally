@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.0] - 2026-11-08
+### Added
+- **Donation types and General Fund can now be hidden from the scoreboard while still counting toward the goal.** Previously, any no-team donation (a custom donation type or the built-in General Fund) always showed as its own line item in the "Other Donations" summary whenever it had a balance. A donation type now has a "Show on the scoreboard" checkbox (Data Management > Teams, next to "donation type, not a team"), and General Fund has an app-wide equivalent (Data Management > Settings) — unchecking either still counts that money toward the event goal, it just stops showing up as a visible line item. Useful for a matching grant or lead gift an organizer wants reflected in the total without being publicly broken out.
+
 ## [2.11.0] - 2026-11-07
 ### Fixed
 - **Leaving Settings > Second Device and coming back no longer invites generating an extra, different viewer link without warning.** Each "Generate Viewer Link" click starts a brand-new, independently-valid OAuth grant — Dropbox has no per-link revoke, so an earlier link keeps working forever regardless of how many more get generated. The app already said this, but inconsistently (one line claimed a link works "until you generate a new one," directly contradicting the correct explanation right below it) and gave no indication, on returning to the page, that a link for the selected event already existed — so clicking Generate again (not realizing an earlier one was already deployed and fine) silently created another one. The panel now remembers the most recent link generated per event on this device and shows a reminder with a "Show it again" option when one exists; generating a new one anyway now asks for confirmation first, spelling out that it won't disable the old one. Corrected the misleading copy in the generated-link screen and README to match.

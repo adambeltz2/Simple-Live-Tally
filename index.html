@@ -230,6 +230,11 @@
                                 <option value="bg-gray-900">Dark Gray</option>
                             </select>
 
+                            <label class="flex items-start gap-2 mb-4 text-xs text-gray-600 dark:text-gray-400">
+                                <input type="checkbox" id="set-general-fund-visible" class="mt-0.5 min-w-0 flex-shrink-0" checked>
+                                <span>Show the General Fund total on the dashboard/TV. Uncheck to count it toward the goal silently, with no visible line item — e.g. for a matching grant or lead gift you don't want publicly broken out.</span>
+                            </label>
+
                             <div class="flex gap-4">
                                 <button id="save-settings-btn" class="flex-1 bg-gray-800 dark:bg-gray-600 text-white font-semibold py-2 rounded text-sm hover:opacity-90 transition-opacity">Apply Settings</button>
                                 <button id="factory-reset-btn" class="flex-1 bg-red-600 text-white font-semibold py-2 rounded text-sm hover:bg-red-700 transition-opacity" title="Purge everything and start completely clean">Factory Reset</button>
@@ -261,9 +266,13 @@
                             <input type="text" id="new-ent-public" placeholder="Public Name" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-2 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
                             <input type="text" id="new-ent-private" placeholder="Private Name (Optional)" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-2 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
                             <input type="url" id="new-ent-img" placeholder="Image URL (Optional)" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-2 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
-                            <label class="flex items-start gap-2 mb-3 text-xs text-gray-600 dark:text-gray-400">
+                            <label class="flex items-start gap-2 mb-2 text-xs text-gray-600 dark:text-gray-400">
                                 <input type="checkbox" id="new-ent-donation" class="mt-0.5 min-w-0 flex-shrink-0">
                                 <span>This is a donation type, not a team (e.g. "Raffle", "Bake Sale") — counts toward the goal but is shown separately, not ranked on the leaderboard.</span>
+                            </label>
+                            <label class="flex items-start gap-2 mb-3 text-xs text-gray-600 dark:text-gray-400">
+                                <input type="checkbox" id="new-ent-show-on-scoreboard" class="mt-0.5 min-w-0 flex-shrink-0" checked>
+                                <span>Show on the scoreboard (only applies to a donation type, above) — uncheck to count it toward the goal silently, with no visible line item.</span>
                             </label>
                             <button id="add-entity-btn" class="w-full bg-blue-600 text-white font-semibold py-2 rounded text-sm hover:opacity-90">Add Entity</button>
                         </div>
@@ -326,7 +335,7 @@
 
     <!-- Footer -->
     <footer id="main-footer" class="flex-shrink-0 text-center text-sm text-gray-500 py-4 mt-auto">
-        <p class="font-medium">Simple Live Tally <span class="font-bold">v2.11.0</span></p>
+        <p class="font-medium">Simple Live Tally <span class="font-bold">v2.12.0</span></p>
         <p class="mt-1 space-x-2">
             <a href="https://github.com/adambeltz2/Simple-Live-Tally" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">GitHub</a>
             <span>|</span>

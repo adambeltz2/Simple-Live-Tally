@@ -1076,6 +1076,7 @@ function saveSettings() {
     const t = document.getElementById('set-title').value;
     const l = document.getElementById('set-logo').value;
     const c = document.getElementById('set-color').value;
+    const generalFundVisible = document.getElementById('set-general-fund-visible').checked;
 
     if (!isAllowedMediaUrl(l)) return alert('Logo URL must be a valid http:// or https:// link.');
 
@@ -1083,6 +1084,7 @@ function saveSettings() {
         appData.settings.title = t;
         appData.settings.logoUrl = l;
         appData.settings.themeColor = c;
+        appData.settings.generalFundVisible = generalFundVisible;
     });
 }
 
@@ -1188,6 +1190,7 @@ function addEntity() {
     const namePrivate = document.getElementById('new-ent-private').value;
     const imageUrl = document.getElementById('new-ent-img').value;
     const isDonationType = document.getElementById('new-ent-donation').checked;
+    const showOnScoreboard = document.getElementById('new-ent-show-on-scoreboard').checked;
     if (!namePublic) return alert('Public Name required.');
 
     const exists = isDuplicateName(appData.entities, namePublic);
@@ -1203,12 +1206,14 @@ function addEntity() {
             imageUrl,
             color: colors[Math.floor(Math.random() * colors.length)],
             isDonationType,
+            showOnScoreboard,
         });
     });
     document.getElementById('new-ent-public').value = '';
     document.getElementById('new-ent-private').value = '';
     document.getElementById('new-ent-img').value = '';
     document.getElementById('new-ent-donation').checked = false;
+    document.getElementById('new-ent-show-on-scoreboard').checked = true;
 }
 
 // Bulk-creates teams from a pasted, newline/comma-separated list of names —
@@ -1251,6 +1256,7 @@ function editEntity(id) {
     const newImg = document.getElementById(`ent-img-${id}`).value;
     const newCol = document.getElementById(`ent-col-${id}`).value;
     const newIsDonationType = document.getElementById(`ent-donation-${id}`).checked;
+    const newShowOnScoreboard = document.getElementById(`ent-show-on-scoreboard-${id}`).checked;
 
     if (!newPub) return alert('Public Name required.');
 
@@ -1267,6 +1273,7 @@ function editEntity(id) {
             ent.imageUrl = newImg;
             ent.color = newCol;
             ent.isDonationType = newIsDonationType;
+            ent.showOnScoreboard = newShowOnScoreboard;
         }
     });
 }
@@ -1555,6 +1562,7 @@ function renderManagement() {
     document.getElementById('set-title').value = appData.settings.title || 'Simple Live Tally';
     document.getElementById('set-logo').value = appData.settings.logoUrl || '';
     document.getElementById('set-color').value = appData.settings.themeColor || 'bg-blue-600';
+    document.getElementById('set-general-fund-visible').checked = appData.settings.generalFundVisible !== false;
 
     // Which event "Generate Viewer Link" will pin the next link to — rebuilt
     // on every render like the dropdown below, but preserves whatever the
@@ -1625,6 +1633,10 @@ function renderManagement() {
                     <label class="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-400">
                         <input type="checkbox" id="ent-donation-${ent.id}" class="mt-0.5 min-w-0 flex-shrink-0" ${ent.isDonationType ? 'checked' : ''}>
                         <span>Donation type, not a team — counts toward the goal but is shown separately, not ranked on the leaderboard.</span>
+                    </label>
+                    <label class="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-400">
+                        <input type="checkbox" id="ent-show-on-scoreboard-${ent.id}" class="mt-0.5 min-w-0 flex-shrink-0" ${ent.showOnScoreboard === false ? '' : 'checked'}>
+                        <span>Show on the scoreboard (only applies if marked a donation type, above) — uncheck to count it toward the goal silently, with no visible line item.</span>
                     </label>
                     <div class="flex justify-between items-center mt-1 border-t dark:border-gray-700 pt-3">
                         <button data-action="edit-entity" data-id="${ent.id}" class="text-xs bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 font-semibold py-1.5 px-4 rounded transition-colors">Save Changes</button>
@@ -1842,18 +1854,24 @@ function renderApp() {
     // --- Render Other Donations (non-team totals: General Fund + any
     // custom donation-type entities) ---
     // These already count toward the goal above (computeEventTotal sums
-    // every transaction regardless of entityId) but were otherwise
-    // invisible — not shown anywhere, just silently folded into the total.
-    // A compact chip row, not a ranked list: these aren't competing for a
+    // every transaction regardless of entityId) whether or not they're
+    // shown here — ent.showOnScoreboard/settings.generalFundVisible only
+    // control visibility of this line item, e.g. for a matching grant or
+    // lead gift an organizer wants counted but not publicly broken out. A
+    // compact chip row, not a ranked list: these aren't competing for a
     // "place", so there's no rank number or leader-relative bar to show,
     // just the name and running total. Hidden entirely unless there's
     // something to show, so an event that doesn't use this feature sees no
     // extra UI.
     const donationSection = document.getElementById('donation-types-section');
     const generalFundTotal = computeGeneralFundTotal(getVisibleTransactionEntries(), displayEventId);
+    const generalFundVisible = appData.settings.generalFundVisible !== false;
     const donationRows = donationTypeEntities
+        .filter((ent) => ent.showOnScoreboard !== false)
         .map((ent) => ({ label: ent.namePublic, amount: totals[ent.id] || 0 }))
-        .concat(generalFundTotal > 0 ? [{ label: 'General Fund', amount: generalFundTotal }] : []);
+        .concat(
+            generalFundTotal > 0 && generalFundVisible ? [{ label: 'General Fund', amount: generalFundTotal }] : [],
+        );
     if (donationRows.length > 0) {
         const donationTextSize = isTvMode ? 'text-sm' : 'text-xs';
         donationSection.innerHTML = donationRows

@@ -439,6 +439,70 @@ test('DOM: dashboard rendering', async (t) => {
         },
     );
 
+    await t.test(
+        'a donation type with showOnScoreboard: false still counts toward the goal but has no visible line item',
+        () => {
+            const window = loadApp();
+            window.appData = baseAppData({
+                events: [{ id: 'evt1', name: 'Main', goalAmount: 200, startDate: '', endDate: '' }],
+                entities: [
+                    { id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' },
+                    {
+                        id: 'e2',
+                        namePublic: 'Lead Gift',
+                        namePrivate: '',
+                        imageUrl: '',
+                        color: 'bg-pink-500',
+                        isDonationType: true,
+                        showOnScoreboard: false,
+                    },
+                ],
+            });
+            window.transactionEntries = [
+                baseEntry({ id: 't1', logicalId: 't1', entityId: 'e1', eventId: 'evt1', amount: 50 }),
+                baseEntry({ id: 't2', logicalId: 't2', entityId: 'e2', eventId: 'evt1', amount: 75 }),
+            ];
+
+            window.renderApp();
+
+            assert.match(
+                window.document.getElementById('goal-gauge-container').innerHTML,
+                /\$125/,
+                'the goal total must still include the hidden donation type (50 + 75)',
+            );
+            const donationSection = window.document.getElementById('donation-types-section');
+            assert.equal(
+                donationSection.classList.contains('hidden'),
+                true,
+                'nothing else is visible, so the whole section stays hidden',
+            );
+            assert.doesNotMatch(donationSection.innerHTML, /Lead Gift/);
+        },
+    );
+
+    await t.test(
+        'General Fund is excluded from Other Donations when settings.generalFundVisible is false, but still counts toward the goal',
+        () => {
+            const window = loadApp();
+            window.appData = baseAppData({
+                settings: { title: 'Test', logoUrl: '', themeColor: 'bg-blue-600', generalFundVisible: false },
+                events: [{ id: 'evt1', name: 'Main', goalAmount: 200, startDate: '', endDate: '' }],
+                entities: [{ id: 'e1', namePublic: 'Team A', namePrivate: '', imageUrl: '', color: 'bg-red-500' }],
+            });
+            window.transactionEntries = [
+                baseEntry({ id: 't1', logicalId: 't1', entityId: 'e1', eventId: 'evt1', amount: 50 }),
+                baseEntry({ id: 't2', logicalId: 't2', entityId: window.GENERAL_FUND_ID, eventId: 'evt1', amount: 30 }),
+            ];
+
+            window.renderApp();
+
+            assert.match(window.document.getElementById('goal-gauge-container').innerHTML, /\$80/);
+            const donationSection = window.document.getElementById('donation-types-section');
+            assert.equal(donationSection.classList.contains('hidden'), true);
+            assert.doesNotMatch(donationSection.innerHTML, /General Fund/);
+        },
+    );
+
     await t.test('the goal gauge follows the actual light/dark theme, not just TV mode, on a light TV display', () => {
         // Regression guard: the gauge used to hardcode `isTvMode ||
         // <dark check>`, which meant it always rendered dark-mode colors on
@@ -954,6 +1018,93 @@ test('DOM: input validation', async (t) => {
         assert.equal(window.appData.entities[0].isDonationType, true);
     });
 
+    await t.test(
+        'addEntity saves showOnScoreboard: false when the "show on the scoreboard" checkbox is unchecked',
+        async () => {
+            const window = loadApp();
+            window.appData = baseAppData();
+            window.accessToken = 'fake-token';
+            window.alert = () => {};
+            window.switchTab('management');
+            window.switchMgmtTab('entities');
+
+            window.fetch = async (url) => {
+                if (String(url).includes('/files/download')) {
+                    return {
+                        ok: true,
+                        status: 200,
+                        headers: { get: () => JSON.stringify({ rev: 'rev1' }) },
+                        json: async () => window.appData,
+                    };
+                }
+                if (String(url).includes('/files/upload')) {
+                    return { ok: true, status: 200, json: async () => ({ rev: 'rev-next' }) };
+                }
+                throw new Error('unexpected fetch URL: ' + url);
+            };
+
+            window.document.getElementById('new-ent-public').value = 'Lead Gift';
+            window.document.getElementById('new-ent-donation').checked = true;
+            window.document.getElementById('new-ent-show-on-scoreboard').checked = false;
+            window.addEntity();
+            await flushAsync();
+
+            assert.equal(window.appData.entities[0].showOnScoreboard, false);
+            assert.equal(
+                window.document.getElementById('new-ent-show-on-scoreboard').checked,
+                true,
+                'the checkbox should reset back to its default (checked) after a successful add',
+            );
+        },
+    );
+
+    await t.test('editEntity can toggle showOnScoreboard on an existing entity', async () => {
+        const window = loadApp();
+        window.appData = baseAppData({
+            entities: [
+                {
+                    id: 'e1',
+                    namePublic: 'Lead Gift',
+                    namePrivate: '',
+                    imageUrl: '',
+                    color: 'bg-pink-500',
+                    isDonationType: true,
+                },
+            ],
+        });
+        window.accessToken = 'fake-token';
+        window.alert = () => {};
+        window.switchTab('management');
+        window.switchMgmtTab('entities');
+        window.renderManagement();
+
+        window.fetch = async (url) => {
+            if (String(url).includes('/files/download')) {
+                return {
+                    ok: true,
+                    status: 200,
+                    headers: { get: () => JSON.stringify({ rev: 'rev1' }) },
+                    json: async () => window.appData,
+                };
+            }
+            if (String(url).includes('/files/upload')) {
+                return { ok: true, status: 200, json: async () => ({ rev: 'rev-next' }) };
+            }
+            throw new Error('unexpected fetch URL: ' + url);
+        };
+
+        assert.equal(
+            window.document.getElementById('ent-show-on-scoreboard-e1').checked,
+            true,
+            'an entity with no stored preference defaults to checked (visible)',
+        );
+        window.document.getElementById('ent-show-on-scoreboard-e1').checked = false;
+        window.editEntity('e1');
+        await flushAsync();
+
+        assert.equal(window.appData.entities[0].showOnScoreboard, false);
+    });
+
     await t.test('quickAddEntities rejects empty input without attempting to save', () => {
         const window = loadApp();
         window.appData = baseAppData();
@@ -1038,6 +1189,35 @@ test('DOM: input validation', async (t) => {
         window.saveSettings();
 
         assert.equal(window.appData.settings.logoUrl, '', 'settings must be untouched on rejection');
+    });
+
+    await t.test('saveSettings persists generalFundVisible when the checkbox is unchecked', async () => {
+        const window = loadApp();
+        window.appData = baseAppData();
+        window.accessToken = 'fake-token';
+        window.switchTab('management');
+        window.switchMgmtTab('settings');
+
+        window.fetch = async (url) => {
+            if (String(url).includes('/files/download')) {
+                return {
+                    ok: true,
+                    status: 200,
+                    headers: { get: () => JSON.stringify({ rev: 'rev1' }) },
+                    json: async () => window.appData,
+                };
+            }
+            if (String(url).includes('/files/upload')) {
+                return { ok: true, status: 200, json: async () => ({ rev: 'rev-next' }) };
+            }
+            throw new Error('unexpected fetch URL: ' + url);
+        };
+
+        window.document.getElementById('set-general-fund-visible').checked = false;
+        window.saveSettings();
+        await flushAsync();
+
+        assert.equal(window.appData.settings.generalFundVisible, false);
     });
 });
 
