@@ -246,6 +246,16 @@
                             <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Generate a read-only link for a TV, lobby laptop, or other display — it connects straight to the event you pick below with no Dropbox login required on that device, and keeps showing that event even if you switch events elsewhere while it's running two at once.</p>
                             <label class="block text-xs font-bold text-gray-500 uppercase mb-1" for="viewer-link-event-select">Event</label>
                             <select id="viewer-link-event-select" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-3 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500"></select>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1" for="viewer-link-theme-select">Theme</label>
+                            <!-- A device that imports this link has never picked a theme of
+                                 its own, so it would otherwise fall into the TV/viewer dark
+                                 default (see initTheme() in js/app.js) regardless of what
+                                 this admin device is set to right now — this makes that
+                                 choice explicit instead of leaving it to chance. -->
+                            <select id="viewer-link-theme-select" class="w-full p-2 border border-gray-400 dark:border-gray-600 rounded text-sm mb-3 shadow-inner bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="dark" selected>Dark (default for TV/viewer displays)</option>
+                                <option value="light">Light</option>
+                            </select>
                             <!-- Shown when renderViewerLinkStatus() (js/app.js) finds an
                                  already-generated link for the selected event in this
                                  device's local viewer_link_history — generating another one

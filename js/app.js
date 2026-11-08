@@ -165,6 +165,14 @@ function importViewerTokenFromUrl() {
     // see getDisplayEventId() — so this screen keeps showing the event it
     // was generated for even if the active event changes elsewhere.
     if (imported.eventId) window.localStorage.setItem('viewer_pinned_event_id', imported.eventId);
+    // An explicit theme choice from generation time, applied as this
+    // device's own stored preference *before* initTheme() runs below — a
+    // link generated with "Light" opens light on the very first load,
+    // rather than this device falling into the TV/viewer dark default and
+    // only fixing itself once someone notices and taps the toggle. Still
+    // just this device's starting point: its own toggle keeps working
+    // normally afterward.
+    if (imported.theme) window.localStorage.setItem('darkMode', imported.theme === 'dark' ? 'true' : 'false');
     window.history.replaceState(null, '', window.location.pathname + window.location.search + VIEWER_HASH);
 }
 importViewerTokenFromUrl();
@@ -505,6 +513,8 @@ async function generateViewerLink() {
     // check), and carried across the redirect the same way the PKCE
     // verifier is, since the OAuth round-trip reloads the page.
     if (eventId) window.localStorage.setItem('viewer_link_pending_event_id', eventId);
+    const theme = document.getElementById('viewer-link-theme-select').value;
+    window.localStorage.setItem('viewer_link_pending_theme', theme);
     const codeChallenge = await generateCodeChallenge(codeVerifier);
     window.location.href = storageProvider.getAuthUrl({
         clientId: CLIENT_ID,
@@ -524,6 +534,8 @@ async function completeViewerLinkGeneration(code, codeVerifier) {
     window.localStorage.removeItem('viewer_link_pkce_verifier');
     const eventId = window.localStorage.getItem('viewer_link_pending_event_id');
     window.localStorage.removeItem('viewer_link_pending_event_id');
+    const theme = window.localStorage.getItem('viewer_link_pending_theme');
+    window.localStorage.removeItem('viewer_link_pending_theme');
     window.history.replaceState({}, document.title, window.location.pathname);
     const result = await storageProvider.exchangeCodeForToken({
         clientId: CLIENT_ID,
@@ -532,7 +544,7 @@ async function completeViewerLinkGeneration(code, codeVerifier) {
         codeVerifier,
     });
     if (result) {
-        showGeneratedViewerLink(result.accessToken, result.refreshToken, eventId);
+        showGeneratedViewerLink(result.accessToken, result.refreshToken, eventId, theme);
     } else {
         alert('Could not generate the viewer link. Please try again from Settings.');
         window.location.reload();
@@ -592,9 +604,9 @@ function displayViewerLinkUrl(url) {
     document.getElementById('status').innerText = 'Connected';
 }
 
-function showGeneratedViewerLink(accessToken, refreshToken, eventId) {
+function showGeneratedViewerLink(accessToken, refreshToken, eventId, theme) {
     const baseUrl = window.location.origin + window.location.pathname;
-    const url = buildViewerLinkUrl(baseUrl, accessToken, refreshToken, eventId);
+    const url = buildViewerLinkUrl(baseUrl, accessToken, refreshToken, eventId, theme);
     saveViewerLinkHistoryEntry(eventId, url);
     displayViewerLinkUrl(url);
 }

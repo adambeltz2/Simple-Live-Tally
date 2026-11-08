@@ -257,25 +257,39 @@
     // time; without a pin, every open viewer link would flip with it). See
     // generateViewerLink()/importViewerTokenFromUrl() in js/app.js for
     // where these are used.
-    function buildViewerLinkUrl(baseUrl, accessToken, refreshToken, eventId) {
+    // theme, when given, is 'dark' or 'light' — an explicit choice made at
+    // generation time that overrides the device's own default (TV/viewer
+    // displays otherwise default to dark on first load — see initTheme() in
+    // js/app.js) the moment the link is opened, before that device has ever
+    // had a chance to pick anything itself. Omitted entirely when the admin
+    // left it on "device default", so an old link (generated before this
+    // existed) keeps behaving exactly as it always has.
+    function buildViewerLinkUrl(baseUrl, accessToken, refreshToken, eventId, theme) {
         const params = new URLSearchParams();
         params.set('at', accessToken);
         if (refreshToken) params.set('rt', refreshToken);
         if (eventId) params.set('ev', eventId);
+        if (theme === 'dark' || theme === 'light') params.set('th', theme);
         return `${baseUrl}${VIEWER_HASH}?${params.toString()}`;
     }
 
     // The inverse of buildViewerLinkUrl(): pulls the access/refresh token
-    // pair (and pinned eventId, if any) back out of a URL hash that carries
-    // one, or returns null if this hash isn't a viewer-link import at all (a
-    // plain "#tv-viewer" from a normal sign-in, some other hash, or
-    // nothing).
+    // pair (and pinned eventId/theme, if any) back out of a URL hash that
+    // carries one, or returns null if this hash isn't a viewer-link import
+    // at all (a plain "#tv-viewer" from a normal sign-in, some other hash,
+    // or nothing).
     function parseViewerLinkImport(hash) {
         if (!hash || !hash.startsWith(VIEWER_HASH + '?')) return null;
         const params = new URLSearchParams(hash.slice(VIEWER_HASH.length + 1));
         const accessToken = params.get('at');
         if (!accessToken) return null;
-        return { accessToken, refreshToken: params.get('rt') || null, eventId: params.get('ev') || null };
+        const theme = params.get('th');
+        return {
+            accessToken,
+            refreshToken: params.get('rt') || null,
+            eventId: params.get('ev') || null,
+            theme: theme === 'dark' || theme === 'light' ? theme : null,
+        };
     }
 
     // URL hash for a "keyer" device — a station where a volunteer only adds

@@ -474,7 +474,7 @@ test('buildViewerLinkUrl / parseViewerLinkImport', async (t) => {
 
         const hash = url.slice(url.indexOf('#'));
         const parsed = parseViewerLinkImport(hash);
-        assert.deepEqual(parsed, { accessToken: 'access123', refreshToken: 'refresh456', eventId: null });
+        assert.deepEqual(parsed, { accessToken: 'access123', refreshToken: 'refresh456', eventId: null, theme: null });
     });
 
     await t.test('round-trips an access token with no refresh token', () => {
@@ -482,7 +482,7 @@ test('buildViewerLinkUrl / parseViewerLinkImport', async (t) => {
         assert.equal(url, 'https://example.com/app/#tv-viewer?at=access123');
 
         const parsed = parseViewerLinkImport(url.slice(url.indexOf('#')));
-        assert.deepEqual(parsed, { accessToken: 'access123', refreshToken: null, eventId: null });
+        assert.deepEqual(parsed, { accessToken: 'access123', refreshToken: null, eventId: null, theme: null });
     });
 
     await t.test('round-trips a pinned eventId alongside the tokens', () => {
@@ -490,12 +490,43 @@ test('buildViewerLinkUrl / parseViewerLinkImport', async (t) => {
         assert.equal(url, 'https://example.com/app/#tv-viewer?at=access123&rt=refresh456&ev=evt_42');
 
         const parsed = parseViewerLinkImport(url.slice(url.indexOf('#')));
-        assert.deepEqual(parsed, { accessToken: 'access123', refreshToken: 'refresh456', eventId: 'evt_42' });
+        assert.deepEqual(parsed, {
+            accessToken: 'access123',
+            refreshToken: 'refresh456',
+            eventId: 'evt_42',
+            theme: null,
+        });
     });
 
     await t.test('omits the ev param, and parses back a null eventId, when no event is pinned', () => {
         const url = buildViewerLinkUrl('https://example.com/app/', 'access123', 'refresh456', null);
         assert.doesNotMatch(url, /ev=/);
+    });
+
+    await t.test('round-trips an explicit theme choice (dark or light) alongside the tokens', () => {
+        const darkUrl = buildViewerLinkUrl('https://example.com/app/', 'access123', 'refresh456', 'evt_42', 'dark');
+        assert.match(darkUrl, /[?&]th=dark(&|$)/);
+        assert.deepEqual(parseViewerLinkImport(darkUrl.slice(darkUrl.indexOf('#'))), {
+            accessToken: 'access123',
+            refreshToken: 'refresh456',
+            eventId: 'evt_42',
+            theme: 'dark',
+        });
+
+        const lightUrl = buildViewerLinkUrl('https://example.com/app/', 'access123', 'refresh456', 'evt_42', 'light');
+        assert.match(lightUrl, /[?&]th=light(&|$)/);
+        assert.equal(parseViewerLinkImport(lightUrl.slice(lightUrl.indexOf('#'))).theme, 'light');
+    });
+
+    await t.test('omits the th param, and parses back a null theme, when no theme is given', () => {
+        const url = buildViewerLinkUrl('https://example.com/app/', 'access123', 'refresh456', 'evt_42');
+        assert.doesNotMatch(url, /th=/);
+        assert.equal(parseViewerLinkImport(url.slice(url.indexOf('#'))).theme, null);
+    });
+
+    await t.test('ignores a garbage th value rather than passing it through', () => {
+        const parsed = parseViewerLinkImport('#tv-viewer?at=access123&th=not-a-real-theme');
+        assert.equal(parsed.theme, null);
     });
 
     await t.test('parseViewerLinkImport returns null for a plain #tv-viewer sign-in hash', () => {

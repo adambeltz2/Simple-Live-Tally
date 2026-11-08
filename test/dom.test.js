@@ -2524,6 +2524,44 @@ test('DOM: viewer link hand-off (second device with no Dropbox login of its own)
         assert.match(link, /[?&]ev=evt1(&|$)/);
     });
 
+    await t.test('generateViewerLink() captures the selected theme and carries it across the redirect', async () => {
+        const window = loadApp();
+        window.localStorage.setItem('dropbox_token', 'admin-own-token');
+        window.appData = baseAppData({
+            events: [{ id: 'evt1', name: 'Main', goalAmount: null, startDate: '', endDate: '' }],
+            activeEventId: 'evt1',
+        });
+        window.switchTab('management');
+        window.document.getElementById('viewer-link-theme-select').value = 'light';
+
+        await window.generateViewerLink();
+
+        assert.equal(window.localStorage.getItem('viewer_link_pending_theme'), 'light');
+    });
+
+    await t.test('completing viewer-link generation includes the chosen theme in the resulting link', async () => {
+        const window = loadApp('http://localhost/?code=abc123');
+        window.localStorage.setItem('viewer_link_pkce_verifier', 'stub-verifier');
+        window.localStorage.setItem('viewer_link_pending_theme', 'light');
+        window.localStorage.setItem('dropbox_token', 'admin-own-token');
+        window.fetch = async (url) => {
+            if (String(url).includes('oauth2/token')) {
+                return { ok: true, json: async () => ({ access_token: 'viewer-tok', refresh_token: 'viewer-rtok' }) };
+            }
+            throw new Error('unexpected fetch URL: ' + url);
+        };
+
+        await window.completeViewerLinkGeneration('abc123', 'stub-verifier');
+
+        assert.equal(
+            window.localStorage.getItem('viewer_link_pending_theme'),
+            null,
+            'the one-time pending theme should be consumed, same as the PKCE verifier',
+        );
+        const link = window.document.getElementById('viewer-link-output').value;
+        assert.match(link, /[?&]th=light(&|$)/);
+    });
+
     await t.test('completing viewer-link generation remembers the link locally, keyed by event', async () => {
         const window = loadApp('http://localhost/?code=abc123');
         window.localStorage.setItem('viewer_link_pkce_verifier', 'stub-verifier');
@@ -2678,6 +2716,44 @@ test('DOM: viewer link hand-off (second device with no Dropbox login of its own)
 
         assert.equal(window.localStorage.getItem('viewer_pinned_event_id'), null);
     });
+
+    await t.test(
+        'importing a viewer link with an explicit light theme makes this device start light, not the TV/viewer dark default',
+        () => {
+            const window = loadApp('http://localhost/#tv-viewer?at=tok123&rt=rtok123&th=light');
+
+            assert.equal(window.localStorage.getItem('darkMode'), 'false');
+            assert.equal(window.document.documentElement.classList.contains('dark'), false);
+        },
+    );
+
+    await t.test(
+        "importing a viewer link with an explicit dark theme stores it as this device's own preference",
+        () => {
+            const window = loadApp('http://localhost/#tv-viewer?at=tok123&rt=rtok123&th=dark');
+
+            assert.equal(window.localStorage.getItem('darkMode'), 'true');
+            assert.equal(window.document.documentElement.classList.contains('dark'), true);
+        },
+    );
+
+    await t.test(
+        'importing a viewer link with no theme choice falls back to the ordinary TV/viewer dark default',
+        () => {
+            const window = loadApp('http://localhost/#tv-viewer?at=tok123&rt=rtok123');
+
+            assert.equal(
+                window.localStorage.getItem('darkMode'),
+                null,
+                'no preference should be written when none was chosen',
+            );
+            assert.equal(
+                window.document.documentElement.classList.contains('dark'),
+                true,
+                'still dark via the ordinary default',
+            );
+        },
+    );
 
     await t.test(
         'a pinned event overrides whatever event is active elsewhere — the actual bug this fixes',
