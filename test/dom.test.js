@@ -939,6 +939,31 @@ test('DOM: dashboard rendering', async (t) => {
         },
     );
 
+    await t.test(
+        'field rows (past the top-5 spotlight) skip the leader-comparison bar to leave room for the full team name',
+        () => {
+            // Regression guard: field rows used to spend a 24px bar + gap on a
+            // leader-comparison indicator too thin to actually read, which was
+            // exactly the width that forced team names to truncate on a narrow
+            // TV/phone screen. A small color dot replaces it.
+            const window = loadApp();
+            const { entities, entries } = makeRoster(16);
+            window.appData = baseAppData({ entities });
+            window.transactionEntries = entries;
+
+            window.renderApp();
+
+            const board = window.document.getElementById('leaderboard');
+            const fieldGrid = board.querySelector('.grid');
+            assert.equal(
+                fieldGrid.querySelector('[data-bar-pct]'),
+                null,
+                'no leader-comparison bar should render in the field grid',
+            );
+            assert.match(fieldGrid.innerHTML, /w-1\.5 h-1\.5 rounded-full/, 'a small color dot should take its place');
+        },
+    );
+
     await t.test('the dashboard field grid shows every team at once, even well past a TV page size', () => {
         const window = loadApp();
         const { entities, entries } = makeRoster(30);

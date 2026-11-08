@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.1] - 2026-11-08
+### Fixed
+- **Team names were getting truncated in the field grid** (the dense rows below the top-5 spotlight) on a narrow TV/phone screen. The 24px leader-comparison bar each row spent — too thin at that size to actually read as a comparison — was exactly the width forcing names to cut off with an ellipsis. Replaced it with a small color dot, freeing that space for the full name.
+
 ## [2.13.0] - 2026-11-08
 ### Added
 - **A viewer link can now pin its device's starting theme (dark or light).** A device that opens a generated link had never picked a theme of its own, so it fell into the ordinary TV/viewer dark default regardless of what the admin's own device was set to — not actually "following" the admin at all, just the built-in first-load default. Settings > Second Device now has a Theme choice (Dark, the existing default, or Light) alongside the event picker; the choice travels in the link itself and is applied before the screen's very first paint, with no flash of the wrong theme and no manual toggle needed on that end.

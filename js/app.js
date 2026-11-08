@@ -1967,15 +1967,19 @@ function renderApp() {
             </div>`;
     }
 
+    // Field rows (everyone past the top-5 spotlight) drop the relative
+    // leader-comparison bar the hero rows have — at this row's width it was
+    // too thin to read as a real comparison, and the space it (plus its gap)
+    // took was exactly what was forcing team names to truncate on a narrow
+    // screen. A small color dot keeps each team's own color identifiable
+    // (matching its hero-row underline/donation-chip color elsewhere) at a
+    // small fraction of the width.
     function fieldRowHtml(ent, rankInfo) {
-        const barPct = computeRelativeBarPercent(totals[ent.id], leaderAmount);
         return `
             <div class="flex items-baseline gap-2 py-1">
                 <span class="font-extrabold tabular-nums text-gray-400 dark:text-gray-500 text-xs w-6 flex-shrink-0">${rankLabel(rankInfo)}</span>
                 <div class="flex items-center gap-1.5 flex-1 min-w-0">
-                    <div class="w-6 h-[3px] rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden flex-shrink-0">
-                        <div class="h-full rounded-full ${ent.color || 'bg-blue-500'}" data-bar-pct="${barPct}"></div>
-                    </div>
+                    <span class="w-1.5 h-1.5 rounded-full ${ent.color || 'bg-blue-500'} flex-shrink-0"></span>
                     <span class="font-bold uppercase text-[10px] tracking-wide truncate text-gray-700 dark:text-gray-300">${escapeHtml(ent.namePublic)}</span>
                 </div>
                 <span class="font-extrabold tabular-nums flex-shrink-0 text-sm text-gray-900 dark:text-white">$${formatAmount(totals[ent.id])}</span>
